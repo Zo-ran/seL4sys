@@ -9,6 +9,7 @@ target_link_libraries(
     sel4runtime sel4
     muslc utils 
     sel4muslcsys sel4platsupport sel4utils sel4debug 
+    sel4allocman
     libsyscall
 )
 

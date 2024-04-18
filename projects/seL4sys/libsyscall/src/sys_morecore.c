@@ -14,11 +14,11 @@
  * huge amount of infrastructure.
  */
 #define MORECORE_AREA_BYTE_SIZE 0x100000
-char morecore_area[MORECORE_AREA_BYTE_SIZE];
+char _morecore_area[MORECORE_AREA_BYTE_SIZE];
 
 /* Pointer to free space in the morecore area. */
-static uintptr_t morecore_base = (uintptr_t) &morecore_area;
-static uintptr_t morecore_top = (uintptr_t) &morecore_area[MORECORE_AREA_BYTE_SIZE];
+static uintptr_t morecore_base = (uintptr_t) &_morecore_area;
+static uintptr_t morecore_top = (uintptr_t) &_morecore_area[MORECORE_AREA_BYTE_SIZE];
 
 /* Actual morecore implementation
    returns 0 if failure, returns newbrk if success.
@@ -33,7 +33,7 @@ long _sys_brk(va_list ap)
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {
         ret = morecore_base;
-    } else if (newbrk < morecore_top && newbrk > (uintptr_t)&morecore_area[0]) {
+    } else if (newbrk < morecore_top && newbrk > (uintptr_t)&_morecore_area[0]) {
         ret = morecore_base = newbrk;
     } else {
         ret = 0;

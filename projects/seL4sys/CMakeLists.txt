@@ -20,7 +20,5 @@ sel4_libs_import_libraries()
 add_subdirectory(os)
 add_subdirectory(libsyscall)
 
-
-# utility CMake functions for the tutorials (not required in normal, non-tutorial applications)
 include(simulation)
 GenerateSimulateScript()
