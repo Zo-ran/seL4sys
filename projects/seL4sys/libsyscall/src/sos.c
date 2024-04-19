@@ -32,6 +32,7 @@ int sos_close(int file)
 
 int sos_read(int file, char *buf, size_t nbyte)
 {
+    
     assert(!"You need to implement this");
     return -1;
 }
