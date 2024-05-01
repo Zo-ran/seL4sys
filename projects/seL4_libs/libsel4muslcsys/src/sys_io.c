@@ -29,7 +29,9 @@
 #include <sel4utils/util.h>
 
 #include <muslcsys/io.h>
+#include <muslcsys/vsyscall.h>
 #include "arch_stdio.h"
+#include "ipc_wrapper.h"
 
 #define FD_TABLE_SIZE(x) (sizeof(muslcsys_fd_t) * (x))
 /* this implementation does not allow users to close STDOUT or STDERR, so they can't be freed */
@@ -270,8 +272,7 @@ write_buf_fn sel4muslcsys_register_stdio_write_fn(write_buf_fn write_fn)
 
 
 /* Writev syscall implementation for muslc. Only implemented for stdin and stdout. */
-long sys_writev(va_list ap)
-{
+long sys_writev(va_list ap) {
     int fildes = va_arg(ap, int);
     struct iovec *iov = va_arg(ap, struct iovec *);
     int iovcnt = va_arg(ap, int);
@@ -300,16 +301,21 @@ long sys_writev(va_list ap)
 
     /* Write the buffer to console if the fd is for stdout or stderr. */
     if (fildes == STDOUT_FILENO || fildes == STDERR_FILENO) {
-        if (stdio_write == NULL) {
-            ZF_LOGD("No standard out function registered");
+        for (int i = 0; i < iovcnt; ++i) {
+            const char *d = iov[i].iov_base;
+            syscall_ipc_write(d, iov[i].iov_len);
+            ret += seL4_GetMR(0);
         }
-        for (int i = 0; i < iovcnt; i++) {
-            if (stdio_write == NULL) {
-                ret += iov[i].iov_len;
-            } else {
-                ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
-            }
-        }
+        // if (stdio_write == NULL) {
+        //     ZF_LOGD("No standard out function registered");
+        // }
+        // for (int i = 0; i < iovcnt; i++) {
+        //     if (stdio_write == NULL) {
+        //         ret += iov[i].iov_len;
+        //     } else {
+        //         ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
+        //     }
+        // }
     } else {
         assert(!"Not implemented");
         return -EBADF;
@@ -318,9 +324,7 @@ long sys_writev(va_list ap)
     return ret;
 }
 
-long sys_write(va_list ap)
-{
-
+long sys_write(va_list ap) {
     int fd = va_arg(ap, int);
     void *buf = va_arg(ap, void *);
     size_t count = va_arg(ap, size_t);
@@ -329,38 +333,53 @@ long sys_write(va_list ap)
     return writev(fd, &iov, 1);
 }
 
-long sys_readv(va_list ap)
-{
+long sys_readv(va_list ap) {
     int fd = va_arg(ap, int);
     struct iovec *iov = va_arg(ap, struct iovec *);
     int iovcnt = va_arg(ap, int);
-    int i;
-    long read;
-    if (fd < FIRST_USER_FD) {
-        assert(!"not implemented");
-        return -EBADF;
-    }
+    long read = 0;
+    
+    if (fd == STDIN_FILENO) {
+        for (int i = 0; i < iovcnt; i++) {
+            int nr = 0;
+            if (iov[i].iov_len != 0) {
+                seL4_MessageInfo_t reply = syscall_ipc_normal(3, SYSCALL_READ, STDIN_FILENO, iov[i].iov_len);
+                char *d = iov[i].iov_base;
+                nr = seL4_MessageInfo_get_length(reply);
+                for (int i = 0; i < nr; ++i) {
+                    d[i] = seL4_GetMR(i);
+                }
+            }
+            if (nr < 0) {
+                if (!read) 
+                    read = nr;
+                break;
+            }
+            read += nr;
+            if (nr != iov[i].iov_len) break;
+        }
+        return read;
+    } else {
+        if (!valid_fd(fd)) {    
+            return -EBADF;
+        }
 
-    if (!valid_fd(fd)) {
-        return -EBADF;
-    }
-
-    /* files can only be opened for reading so no need to check any permissions.
-     * just get straight into it
-     */
-    muslcsys_fd_t *muslc_fd = get_fd_struct(fd);
-    if (muslc_fd->filetype != FILE_TYPE_CPIO) {
-        assert(!"not implemented");
-        return -EINVAL;
-    }
-    cpio_file_data_t *cpio_fd = muslc_fd->data;
-    read = 0;
-    for (i = 0; i < iovcnt && cpio_fd->current < cpio_fd->size; i++) {
-        long max = cpio_fd->size - cpio_fd->current;
-        long len = max < iov[i].iov_len ? max : iov[i].iov_len;
-        memcpy(iov[i].iov_base, cpio_fd->start + cpio_fd->current, len);
-        cpio_fd->current += len;
-        read += len;
+        /* files can only be opened for reading so no need to check any permissions.
+        * just get straight into it
+        */
+        muslcsys_fd_t *muslc_fd = get_fd_struct(fd);
+        if (muslc_fd->filetype != FILE_TYPE_CPIO) {
+            assert(!"not implemented");
+            return -EINVAL;
+        }
+        cpio_file_data_t *cpio_fd = muslc_fd->data;
+        for (int i = 0; i < iovcnt && cpio_fd->current < cpio_fd->size; i++) {
+            long max = cpio_fd->size - cpio_fd->current;
+            long len = max < iov[i].iov_len ? max : iov[i].iov_len;
+            memcpy(iov[i].iov_base, cpio_fd->start + cpio_fd->current, len);
+            cpio_fd->current += len;
+            read += len;
+        }
     }
     return read;
 }

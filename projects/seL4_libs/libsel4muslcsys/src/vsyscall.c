@@ -111,6 +111,8 @@ long boot_sys_writev(va_list ap)
 }
 
 static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
+    [__NR_nanosleep] = sys_nanosleep,
+    [__NR_clock_gettime] = sys_clock_gettime,
 #ifdef __NR_set_thread_area
     [__NR_set_thread_area] = boot_set_thread_area,
 #endif
@@ -218,7 +220,7 @@ muslcsys_syscall_t muslcsys_install_syscall(int syscall, muslcsys_syscall_t new_
  * it can be overriden. We are able to have this constructor
  * in this file since we know it will get looked at by the linker due
  * to __vsyscall_ptr being here */
-static void CONSTRUCTOR(CONSTRUCTOR_MIN_PRIORITY) init_syscall_table(void)
+static void CONSTRUCTOR(CONSTRUCTOR_MIN_PRIORITY + 1) init_syscall_table(void)
 {
     muslcsys_syscall_t ret UNUSED;
     ret = muslcsys_install_syscall(__NR_set_tid_address, sys_set_tid_address);

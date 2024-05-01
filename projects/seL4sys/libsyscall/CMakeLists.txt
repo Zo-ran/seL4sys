@@ -4,6 +4,7 @@ project(libsyscall C)
 
 add_library(
     libsyscall 
+    EXCLUDE_FROM_ALL
     src/sos.c
     src/sys_exit.c
     src/sys_morecore.c
@@ -14,3 +15,5 @@ add_library(
 )
 target_include_directories(libsyscall PUBLIC include)
 target_link_libraries(libsyscall sel4runtime muslc sel4 utils sel4muslcsys)
+
+add_compile_options(-Wall -Werror -W -Wextra)

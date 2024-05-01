@@ -15,6 +15,11 @@
 
 #define MUSLCSYS_WITH_VSYSCALL_PRIORITY (CONSTRUCTOR_MIN_PRIORITY + 10)
 
+#define SYSCALL_READ 0
+#define SYSCALL_WRITE 1
+#define SYSCALL_SLEEP 2
+#define SYSCALL_GETIME 3
+
 typedef long (*muslcsys_syscall_t)(va_list);
 
 /* Installs a new handler for the given syscall. Any previous handler is returned

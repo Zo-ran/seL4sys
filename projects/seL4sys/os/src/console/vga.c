@@ -1,16 +1,20 @@
 #include "vga.h"
-#include "rootvars.h"
+#include "../rootvars.h"
 
 #define VGA_PADDR 0xb8000
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
 #define VGA_MEM_SIZE 0x1000
+#define VGA_COLOR (0xc << 8)
 
 static uint16_t *VGA_MEM;
 static uint16_t VGA_BUFFER[VGA_WIDTH * VGA_HEIGHT];
 
 int displayRow = 0;
 int displayCol = 0;
+int waterline = 0;
+
+#define VGA_POS_PUTCHAR(ch) VGA_MEM[displayRow * VGA_WIDTH + displayCol] = ((uint16_t) ch) | VGA_COLOR
 
 static inline void clear_screen() {
     for (int i = 0; i < VGA_WIDTH; ++i)
@@ -24,16 +28,12 @@ static inline void scroll_screen() {
         VGA_MEM[i] = 0 | (0xc << 8);
 }
 
-static inline void update_cursor(){
+void update_cursor(){
 	int cursorPos = displayRow * VGA_WIDTH + displayCol;
 	outByte(0x3d4, 0x0f);
 	outByte(0x3d5, (unsigned char)(cursorPos & 0xff));
 	outByte(0x3d4, 0x0e);
-	outByte(0x3d5, (unsigned char)((cursorPos>>8) & 0xff));
-}
-
-static inline void vga_pos_putchar(int row, int col, char ch) {
-    VGA_MEM[row * VGA_WIDTH + col] = ((u_int16_t) ch) | (0xc << 8);
+	outByte(0x3d5, (unsigned char)((cursorPos >> 8) & 0xff));
 }
 
 static inline void check_displayrow() {
@@ -54,22 +54,28 @@ static inline void check_displaycol() {
 
 void vga_init() {
     VGA_MEM = ps_io_map(&io_ops.io_mapper, VGA_PADDR, VGA_MEM_SIZE, false, PS_MEM_NORMAL);
+    ZF_LOGF_IFERR(VGA_MEM == NULL, "Failed to init vga!");
     clear_screen();
     update_cursor();
 }
 
-void vga_putchar(char ch) {
-    if (ch != 0) {
-        if (ch == '\n') {
-            displayCol = 0;
-            displayRow += 1;
-            check_displayrow();        
-        } else {
-            // write video memory
-            VGA_MEM[displayRow * VGA_WIDTH + displayCol] = ((u_int16_t) ch) | (0xc << 8);    
-            displayCol += 1;
-            check_displaycol();
-        }
+void vga_putchar(char ch, int Mwaterline) {
+    if (ch == '\n') {
+        displayCol = 0;
+        displayRow += 1;
+        check_displayrow();        
+    } else {
+        // write video memory
+        VGA_POS_PUTCHAR(ch);
+        displayCol += 1;
+        check_displaycol();
     }
-    update_cursor();
+    waterline = Mwaterline ? displayCol : waterline;
+}
+
+void vga_delchar() {
+    if (displayCol > 0 && displayCol > waterline){
+        displayCol -= 1;
+        VGA_POS_PUTCHAR(0);
+    }   
 }

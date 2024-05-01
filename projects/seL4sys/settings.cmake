@@ -43,3 +43,8 @@ ApplyCommonSimulationSettings(${KernelSel4Arch})
 if(FORCE_IOMMU)
     set(KernelIOMMU ON CACHE BOOL "" FORCE)
 endif()
+
+function(add_app app)
+    set(destination "${CMAKE_BINARY_DIR}/apps/${app}")
+    set_property(GLOBAL APPEND PROPERTY apps_property "$<TARGET_FILE:${app}>")
+endfunction()

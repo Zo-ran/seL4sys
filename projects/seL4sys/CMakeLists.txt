@@ -19,8 +19,9 @@ util_libs_import_libraries()
 sel4_projects_libs_import_libraries()
 sel4_libs_import_libraries()
 
-add_subdirectory(os)
+add_subdirectory(apps)
 add_subdirectory(libsyscall)
+add_subdirectory(os)
 
 include(simulation)
 GenerateSimulateScript()
