@@ -10,12 +10,14 @@
 #include <sel4utils/thread.h>
 #include <sel4utils/vspace.h>
 #include <sel4utils/process.h>
+#include <sel4utils/vspace_internal.h>
 
 #include <sel4runtime.h>
 
 #include <utils/util.h>
 
 #include <muslcsys/vsyscall.h>
+
 
 // C standard Lib
 #include <stdio.h>
@@ -45,8 +47,8 @@ seL4_CPtr root_vspace_cap;
 // text segment starts from 0x8048000
 
 /* static memory for the allocator to bootstrap with */
-#define ALLOCATOR_STATIC_POOL_SIZE (BIT(seL4_PageBits) * 10)
-UNUSED static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
+#define ALLOCATOR_STATIC_POOL_SIZE (BIT(seL4_PageBits) * 10000)
+static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
 
 /* dimensions of virtual memory for the allocator to use */
 #define ALLOCATOR_VIRTUAL_POOL_SIZE (BIT(seL4_PageBits) * 100)
@@ -119,23 +121,6 @@ void interrupt_init(void) {
 	outByte(PORT_PIC_SLAVE + 1, 0x3); // ICW4, Auto EOI in 8086/88 mode
 }
 
-void load_test_app(const char *app_name, uint8_t app_prio) {
-    sel4utils_process_t new_process;
-    sel4utils_process_config_t config = process_config_default_simple(&simple, app_name, app_prio);
-    cspacepath_t cap_path;
-
-    // configure user test process
-    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, &new_process, &vka, &vspace, config);
-    NAME_THREAD(new_process.thread.tcb.cptr, "user test thread");
-
-    // mint the syscall endpoint into the process
-    vka_cspace_make_path(&vka, syscall_ep, &cap_path);
-    sel4utils_mint_cap_to_process(&new_process, cap_path, seL4_AllRights, 0x61);
-    test_printf("buf addr: %p, stack top: %p, stack_size: %d, init esp: %p\n", new_process.thread.ipc_buffer_addr, new_process.thread.stack_top, new_process.thread.stack_size, new_process.thread.initial_stack_pointer);
-    // start new process
-    FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, &new_process, &vka, &vspace, 0, NULL, 1);
-}
-
 void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageInfo_t *reply_tag) {
     seL4_Word syscall_number = seL4_GetMR(0);
     *have_reply = true;
@@ -193,9 +178,27 @@ void handle_syscall_loop() {
     }
 }
 
+void load_test_app(const char *app_name, uint8_t app_prio) {
+    sel4utils_process_t new_process;
+    sel4utils_process_config_t config = process_config_default_simple(&simple, app_name, app_prio);
+    cspacepath_t cap_path;
+    
+    // configure user test process
+    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, &new_process, &vka, &vspace, config);
+    NAME_THREAD(new_process.thread.tcb.cptr, "user test thread");
+
+    // mint the syscall endpoint into the process
+    vka_cspace_make_path(&vka, syscall_ep, &cap_path);
+    sel4utils_mint_cap_to_process(&new_process, cap_path, seL4_AllRights, 0x61);
+    test_printf("buf addr: %p, stack top: %p, stack_size: %d, init esp: %p\n", new_process.thread.ipc_buffer_addr, new_process.thread.stack_top, new_process.thread.stack_size, new_process.thread.initial_stack_pointer);
+    // start new process
+    FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, &new_process, &vka, &vspace, 0, NULL, 1);
+}
+
 void start_kbd_thread() {
     // alloc new tcb
-    vka_object_t kbd_tcb, kbd_ipc_frame;
+    vka_object_t kbd_tcb;
+    seL4_CPtr ipc_frame;
     seL4_UserContext regs = {0};
     size_t regs_size = sizeof(seL4_UserContext) / sizeof(seL4_Word);
 
@@ -203,11 +206,11 @@ void start_kbd_thread() {
     NAME_THREAD(kbd_tcb.cptr, "keyboard IRQ handle thread");
 
     // set thread's ipc buffer 
-    FUNC_IFERR("Failed to alloc ipc frame!\n", vka_alloc_frame, &vka, 12, &kbd_ipc_frame);
-    FUNC_IFERR("Failed to map a page!\n", seL4_ARCH_Page_Map, kbd_ipc_frame.cptr, root_vspace_cap, KBD_IPCBUF_VADDR, seL4_AllRights, seL4_ARCH_Default_VMAttributes);
+    void *vaddr = sel4utils_new_pages(&vspace, seL4_AllRights, 1, PAGE_BITS_4K);
+    ipc_frame = sel4utils_get_cap(&vspace, vaddr);
 
     // configure tcb
-    FUNC_IFERR("Failed to configure new TCB!\n", seL4_TCB_Configure, kbd_tcb.cptr, seL4_CapNull, root_cspace_cap, seL4_NilData, root_vspace_cap, seL4_NilData, KBD_IPCBUF_VADDR, kbd_ipc_frame.cptr);
+    FUNC_IFERR("Failed to configure new TCB!\n", seL4_TCB_Configure, kbd_tcb.cptr, seL4_CapNull, root_cspace_cap, seL4_NilData, root_vspace_cap, seL4_NilData, (seL4_Word) vaddr, ipc_frame);
 
     // calculate stack
     const int stack_alignment_requirement = sizeof(seL4_Word) * 2;
@@ -221,7 +224,7 @@ void start_kbd_thread() {
 
     // set thread's local storage (TLS) region for the new thread to store the ipc buffer pointer
     uintptr_t tls = sel4runtime_write_tls_image(tls_region);
-    seL4_IPCBuffer *ipcbuf = (seL4_IPCBuffer*)KBD_IPCBUF_VADDR;
+    seL4_IPCBuffer *ipcbuf = (seL4_IPCBuffer*)vaddr;
     FUNC_IFERR("Failed to set ipc buffer in TLS of new thread!\n", sel4runtime_set_tls_variable, tls, __sel4_ipc_buffer, ipcbuf);
     FUNC_IFERR("Failed to set TLS base", seL4_TCB_SetTLSBase, kbd_tcb.cptr, tls);
 
@@ -230,12 +233,6 @@ void start_kbd_thread() {
 
     // start kbd thread
     FUNC_IFERR("Failed to start kdb thread!\n", seL4_TCB_Resume, kbd_tcb.cptr);
-}
-
-void more_page_tables() {
-    vka_object_t pt_obj;
-    FUNC_IFERR("Failed to alloc new page table!\n", vka_alloc_page_table, &vka, &pt_obj);
-    FUNC_IFERR("Failed to map page table into VSpace!\n", seL4_ARCH_PageTable_Map, pt_obj.cptr, root_vspace_cap, KBD_IPCBUF_VADDR, seL4_ARCH_Default_VMAttributes);
 }
 
 int main(int argc, char *argv[]) {
@@ -253,9 +250,6 @@ int main(int argc, char *argv[]) {
 
     // init syscall endpoint
     syscallserver_ipc_init();
-
-    // get more page tables
-    more_page_tables();
 
     // load user apps
     load_test_app("test", 1);

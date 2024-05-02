@@ -21,6 +21,8 @@
 #include <sel4utils/util.h>
 #include <sel4utils/mapping.h>
 
+#include "ipc_wrapper.h"
+
 /* If we have a nonzero static morecore then we are just doing dodgy hacky morecore */
 #if CONFIG_LIB_SEL4_MUSLC_SYS_MORECORE_BYTES > 0
 
@@ -46,7 +48,8 @@ long sys_brk(va_list ap)
 
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
-
+    // seL4_MessageInfo_t reply = syscal_ipc
+    // printf("newbrk: %p ", newbrk);
     /*if the newbrk is 0, return the bottom of the heap*/
     if (!newbrk) {
         ret = morecore_base;
@@ -55,7 +58,7 @@ long sys_brk(va_list ap)
     } else {
         ret = 0;
     }
-
+    // printf("ret: %p\n", ret);
     return ret;
 }
 

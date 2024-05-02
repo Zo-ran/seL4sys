@@ -1,0 +1,15 @@
+#pragma once
+
+#include <utils/page.h>
+
+#define MAX_PHISICAL_MEM 0x1fb00000
+
+#define TEXT_START 0x8048000
+#define KERNEL_START 0xe0100000
+#define KERNEL_END 0xe02e9000
+
+#define IPC_BUFFER_VADDR 0x8000000
+#define IPC_BUFFER_SIZE PAGE_SIZE_4K
+#define STACK_TOP_VADDR 0xc0000000 
+#define STACK_SIZE PAGE_SIZE_4K * 16
+#define HEAP_BASE_VADDR 0x10000000

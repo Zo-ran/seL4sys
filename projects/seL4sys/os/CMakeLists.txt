@@ -23,7 +23,6 @@ target_link_libraries(
     muslc utils 
     sel4muslcsys sel4platsupport sel4utils sel4debug 
     sel4allocman
-    libsyscall
 )
 
 # Tell the build system that this application is the root task. 

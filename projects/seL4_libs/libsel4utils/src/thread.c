@@ -136,7 +136,7 @@ int sel4utils_configure_thread_config(vka_t *vka, vspace_t *parent, vspace_t *al
     if (config.custom_stack_size) {
         res->stack_size = config.stack_size;
     } else {
-        res->stack_size = BYTES_TO_4K_PAGES(CONFIG_SEL4UTILS_STACK_SIZE);
+        res->stack_size = BYTES_TO_4K_PAGES(STACK_SIZE);
     }
 
     if (res->stack_size > 0) {

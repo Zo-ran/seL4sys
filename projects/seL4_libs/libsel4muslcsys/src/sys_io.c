@@ -301,21 +301,24 @@ long sys_writev(va_list ap) {
 
     /* Write the buffer to console if the fd is for stdout or stderr. */
     if (fildes == STDOUT_FILENO || fildes == STDERR_FILENO) {
-        for (int i = 0; i < iovcnt; ++i) {
+        if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
+            for (int i = 0; i < iovcnt; ++i) {
             const char *d = iov[i].iov_base;
             syscall_ipc_write(d, iov[i].iov_len);
             ret += seL4_GetMR(0);
+            }
+        } else {
+            if (stdio_write == NULL) {
+                ZF_LOGD("No standard out function registered");
+            }
+            for (int i = 0; i < iovcnt; i++) {
+                if (stdio_write == NULL) {
+                    ret += iov[i].iov_len;
+                } else {
+                    ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
+                }
+            }
         }
-        // if (stdio_write == NULL) {
-        //     ZF_LOGD("No standard out function registered");
-        // }
-        // for (int i = 0; i < iovcnt; i++) {
-        //     if (stdio_write == NULL) {
-        //         ret += iov[i].iov_len;
-        //     } else {
-        //         ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
-        //     }
-        // }
     } else {
         assert(!"Not implemented");
         return -EBADF;

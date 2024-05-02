@@ -11,18 +11,12 @@
 void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages)
 {
     int error = 0;
-    void *vaddr = NULL;
-
-    /* one extra page for the guard */
-    reservation_t reserve = vspace_reserve_range(vspace, (n_pages + 1) * PAGE_SIZE_4K,
-                                                 seL4_AllRights, 1, &vaddr);
+    uintptr_t stack_bottom = STACK_TOP_VADDR - STACK_SIZE;
+    reservation_t reserve = vspace_reserve_range_at(vspace, (void *) stack_bottom, n_pages * PAGE_SIZE_4K, seL4_AllRights, 1);
 
     if (reserve.res == NULL) {
         return NULL;
     }
-
-    /* reserve the first page as the guard */
-    uintptr_t stack_bottom = (uintptr_t) vaddr + PAGE_SIZE_4K;
 
     /* create and map the pages */
     error = vspace_new_pages_at_vaddr(vspace, (void *) stack_bottom, n_pages, seL4_PageBits, reserve);
@@ -47,11 +41,18 @@ void vspace_free_sized_stack(vspace_t *vspace, void *stack_top, size_t n_pages)
     }
 }
 
-void *vspace_new_ipc_buffer(vspace_t *vspace, seL4_CPtr *page)
-{
+void *vspace_new_ipc_buffer(vspace_t *vspace, seL4_CPtr *page) {
+    void *vaddr = (void *) IPC_BUFFER_VADDR;
+    reservation_t reserve = vspace_reserve_range_at(vspace, vaddr, IPC_BUFFER_SIZE, seL4_AllRights, 1);
 
-    void *vaddr = vspace_new_pages(vspace, seL4_AllRights, 1, seL4_PageBits);
-    if (vaddr == NULL) {
+    if (reserve.res == NULL) {
+        return NULL;
+    }
+
+    int error = vspace_new_pages_at_vaddr(vspace, vaddr, BYTES_TO_4K_PAGES(IPC_BUFFER_SIZE), seL4_PageBits, reserve);
+
+    if (error) {
+        vspace_free_reservation(vspace, reserve);
         return NULL;
     }
 

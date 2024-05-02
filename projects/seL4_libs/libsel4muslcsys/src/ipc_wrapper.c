@@ -4,7 +4,6 @@
 #include "ipc_wrapper.h"
 #include "arch_stdio.h"
 
-#define SERVER_EP_BADGE 0x8
 
 seL4_MessageInfo_t syscall_ipc_normal(seL4_Uint32 length, ...) {
     va_list ap;

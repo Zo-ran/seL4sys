@@ -13,6 +13,8 @@
 #include <vka/object.h>
 #include <vspace/page.h>
 
+#include "vm_layout.h"
+
 typedef struct vspace vspace_t;
 
 typedef struct reservation {
