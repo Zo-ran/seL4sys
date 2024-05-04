@@ -40,6 +40,7 @@ typedef struct {
     /* cptr (with respect to the process cnode) of the tcb of the first thread (0 means not supplied) */
     seL4_CPtr dest_tcb_cptr;
     seL4_Word pagesz;
+    seL4_Word heap_top;
     object_node_t *allocated_object_list_head;
     /* ELF headers that describe the sections of the loaded image (at least as they
      * existed at load time). Is different to the elf_regions, which have reservations,

@@ -1,6 +1,6 @@
 #include "keyboard.h"
 #include "vga.h"
-#include "../rootvars.h"
+#include "../ioport.h"
 #include "../utils.h"
  
 vka_object_t kbd_ntfn;
@@ -263,12 +263,12 @@ void kbd_irq_handle_mainloop() {
     }
 }
 
-void kbd_init() {
-    seL4_Error error = vka_cspace_alloc_path(&vka, &kbd_irq);
-    error = vka_alloc_notification(&vka, &kbd_ntfn);
-	error = vka_alloc_notification(&vka, &buf_full_ntfn);
+void kbd_init(vka_t *vka, simple_t *simple) {
+    seL4_Error error = vka_cspace_alloc_path(vka, &kbd_irq);
+    error = vka_alloc_notification(vka, &kbd_ntfn);
+	error = vka_alloc_notification(vka, &buf_full_ntfn);
 
-    error = simple_get_IRQ_handler(&simple, 0x1, kbd_irq);
+    error = simple_get_IRQ_handler(simple, 0x1, kbd_irq);
     error = seL4_IRQHandler_SetNotification(kbd_irq.capPtr, kbd_ntfn.cptr);
 
     ZF_LOGF_IFERR(error != seL4_NoError, "Failed to init keyboard!");

@@ -21,6 +21,7 @@
 #include <sel4utils/util.h>
 #include <sel4utils/mapping.h>
 
+#include <muslcsys/vsyscall.h>
 #include "ipc_wrapper.h"
 
 /* If we have a nonzero static morecore then we are just doing dodgy hacky morecore */
@@ -43,23 +44,43 @@ uintptr_t morecore_top = (uintptr_t) &morecore_area[CONFIG_LIB_SEL4_MUSLC_SYS_MO
    returns 0 if failure, returns newbrk if success.
 */
 
-long sys_brk(va_list ap)
-{
-
+long sys_brk(va_list ap) {
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
-    // seL4_MessageInfo_t reply = syscal_ipc
-    // printf("newbrk: %p ", newbrk);
-    /*if the newbrk is 0, return the bottom of the heap*/
-    if (!newbrk) {
-        ret = morecore_base;
-    } else if (newbrk < morecore_top && newbrk > (uintptr_t)&morecore_area[0]) {
-        ret = morecore_base = newbrk;
+    if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
+    assert(0);
+        seL4_MessageInfo_t reply = syscall_ipc_normal(2, SYSCALL_BRK, newbrk);
+        ret = seL4_GetMR(0);
     } else {
-        ret = 0;
+        if (!newbrk) {
+            ret = morecore_base;
+        } else if (newbrk < morecore_top && newbrk > (uintptr_t)&morecore_area[0]) {
+            ret = morecore_base = newbrk;
+        } else {
+            ret = 0;
+        }
     }
-    // printf("ret: %p\n", ret);
+    printf("ret: %p, new brk: %p\n", ret, newbrk);
     return ret;
+}
+
+/* This is a "dummy" implementation of sys_madvise() to satisfy free() in muslc. */
+long sys_madvise(va_list ap) {
+    void *addr = va_arg(ap, void *);
+    size_t size = va_arg(ap, uintptr_t);
+    int advise = va_arg(ap, int);
+    printf("debug: %p %p %d\n", addr, size, advise);
+    // assert(0);
+    ZF_LOGV("calling dummy version of sys_madvise()\n");
+    return 0;
+}
+
+
+long sys_munmap(va_list ap)
+{assert(0);
+    ZF_LOGE("%s is unsupported. This may have been called due to a "
+            "large malloc'd region being free'd.", __func__);
+    return 0;
 }
 
 /* Large mallocs will result in muslc calling mmap, so we do a minimal implementation
@@ -68,6 +89,7 @@ long sys_mmap_impl(void *addr, size_t length, int prot, int flags, int fd, off_t
 {
     if (flags & MAP_ANONYMOUS) {
         /* Check that we don't try and allocate more than exists */
+
         if (length > morecore_top - morecore_base) {
             return -ENOMEM;
         }
@@ -83,6 +105,30 @@ long sys_mremap(va_list ap)
 {
     assert(!"not implemented");
     return -ENOMEM;
+}
+
+long sys_mmap(va_list ap)
+{assert(0);
+    void *addr = va_arg(ap, void *);
+    size_t length = va_arg(ap, size_t);
+    int prot = va_arg(ap, int);
+    int flags = va_arg(ap, int);
+    int fd = va_arg(ap, int);
+    off_t offset = va_arg(ap, off_t);
+    return sys_mmap_impl(addr, length, prot, flags, fd, offset);
+}
+
+long sys_mmap2(va_list ap)
+{assert(0);
+    void *addr = va_arg(ap, void *);
+    size_t length = va_arg(ap, size_t);
+    int prot = va_arg(ap, int);
+    int flags = va_arg(ap, int);
+    int fd = va_arg(ap, int);
+    off_t offset = va_arg(ap, off_t);
+    /* for now redirect to mmap. muslc always defines an off_t as being an int64 */
+    /* so this will not overflow */
+    return sys_mmap_impl(addr, length, prot, flags, fd, offset * 4096);
 }
 
 #else
@@ -333,41 +379,3 @@ long sys_mremap(va_list ap)
 }
 
 #endif
-
-/* This is a "dummy" implementation of sys_madvise() to satisfy free() in muslc. */
-long sys_madvise(va_list ap)
-{
-    ZF_LOGV("calling dummy version of sys_madvise()\n");
-    return 0;
-}
-
-long sys_mmap(va_list ap)
-{
-    void *addr = va_arg(ap, void *);
-    size_t length = va_arg(ap, size_t);
-    int prot = va_arg(ap, int);
-    int flags = va_arg(ap, int);
-    int fd = va_arg(ap, int);
-    off_t offset = va_arg(ap, off_t);
-    return sys_mmap_impl(addr, length, prot, flags, fd, offset);
-}
-
-long sys_mmap2(va_list ap)
-{
-    void *addr = va_arg(ap, void *);
-    size_t length = va_arg(ap, size_t);
-    int prot = va_arg(ap, int);
-    int flags = va_arg(ap, int);
-    int fd = va_arg(ap, int);
-    off_t offset = va_arg(ap, off_t);
-    /* for now redirect to mmap. muslc always defines an off_t as being an int64 */
-    /* so this will not overflow */
-    return sys_mmap_impl(addr, length, prot, flags, fd, offset * 4096);
-}
-
-long sys_munmap(va_list ap)
-{
-    ZF_LOGE("%s is unsupported. This may have been called due to a "
-            "large malloc'd region being free'd.", __func__);
-    return 0;
-}

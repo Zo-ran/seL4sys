@@ -1,5 +1,5 @@
 #include "vga.h"
-#include "../rootvars.h"
+#include "../ioport.h"
 
 #define VGA_PADDR 0xb8000
 #define VGA_WIDTH 80
@@ -52,9 +52,9 @@ static inline void check_displaycol() {
     }
 }
 
-void vga_init() {
-    VGA_MEM = ps_io_map(&io_ops.io_mapper, VGA_PADDR, VGA_MEM_SIZE, false, PS_MEM_NORMAL);
-    ZF_LOGF_IFERR(VGA_MEM == NULL, "Failed to init vga!");
+void vga_init(const ps_io_mapper_t *io_mapper) {
+    VGA_MEM = ps_io_map(io_mapper, VGA_PADDR, VGA_MEM_SIZE, false, PS_MEM_NORMAL);
+    assert(VGA_MEM != NULL);
     clear_screen();
     update_cursor();
 }

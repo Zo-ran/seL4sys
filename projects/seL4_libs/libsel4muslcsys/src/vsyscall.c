@@ -148,15 +148,9 @@ static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
     [__NR_access] = sys_access,
 #endif
     [__NR_brk] = sys_brk,
-#ifdef __NR_mmap2
     [__NR_mmap2] = sys_mmap2,
-#endif
-#ifdef __NR_mmap
     [__NR_mmap] = sys_mmap,
-#endif
-#ifdef __NR_munmap
     [__NR_munmap] = sys_munmap,
-#endif
     [__NR_mremap] = sys_mremap,
     [__NR_madvise] = sys_madvise,
 };

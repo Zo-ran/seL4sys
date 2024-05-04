@@ -27,10 +27,12 @@
 
 // My Lib
 #include "utils.h"
-#include "rootvars.h"
-#include "console/vga.h"
+#include "ioport.h"
+#include "syscall_handler.h"
 #include "console/keyboard.h"
+#include "console/vga.h"
 #include "timer.h"
+#include "process.h"
 
 seL4_BootInfo *boot_info;
 simple_t simple;
@@ -121,49 +123,6 @@ void interrupt_init(void) {
 	outByte(PORT_PIC_SLAVE + 1, 0x3); // ICW4, Auto EOI in 8086/88 mode
 }
 
-void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageInfo_t *reply_tag) {
-    seL4_Word syscall_number = seL4_GetMR(0);
-    *have_reply = true;
-    switch (syscall_number) {
-        case SYSCALL_READ: {
-            int fileno = seL4_GetMR(1), max_len = seL4_GetMR(2), read_len = 0;
-            if (fileno == STDIN_FILENO) {
-                seL4_Wait(buf_full_ntfn.cptr, NULL);
-                while (buffer_head != buffer_tail && read_len < max_len) {
-                    seL4_SetMR(read_len, key_buffer[buffer_head++]);
-                    buffer_head %= MAX_KEYBUFFER_SIZE;
-                    read_len += 1;
-                }
-                seL4_MessageInfo_ptr_set_length(reply_tag, read_len);
-            } else {
-                assert(!"Filesystem not implemented!\n");
-            }
-            break;
-        }
-        case SYSCALL_WRITE: {
-            seL4_Word len = seL4_GetMR(1);
-            for (int i = 0; i < len; ++i) {
-                char ch = seL4_GetMR(i + 2);
-                __arch_putchar(ch); 
-                vga_putchar(ch, true);
-            }
-            update_cursor();
-            seL4_MessageInfo_ptr_set_length(reply_tag, 1);
-            seL4_SetMR(0, len);
-            break;
-        }
-        case SYSCALL_SLEEP:
-            timer_sleep(seL4_GetMR(1));
-            break;
-        case SYSCALL_GETIME:
-            seL4_MessageInfo_ptr_set_length(reply_tag, 1);
-            seL4_SetMR(0, timer_get_time());
-            break;
-        default:
-            *have_reply = false;
-    }
-}
-
 void handle_syscall_loop() {
     bool have_reply = false;
     while (1) {
@@ -174,25 +133,27 @@ void handle_syscall_loop() {
         } else {
             msg_tag = seL4_Recv(syscall_ep, &sender_badge);
         }
-        handle_syscall(msg_tag, &have_reply, &reply_tag);
+        handle_syscall(msg_tag, &have_reply, &reply_tag, sender_badge);
     }
 }
 
 void load_test_app(const char *app_name, uint8_t app_prio) {
-    sel4utils_process_t new_process;
+    int cur_pid = alloc_pid();
+    sel4utils_process_t *new_process = pid_getproc(cur_pid);
     sel4utils_process_config_t config = process_config_default_simple(&simple, app_name, app_prio);
     cspacepath_t cap_path;
     
     // configure user test process
-    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, &new_process, &vka, &vspace, config);
-    NAME_THREAD(new_process.thread.tcb.cptr, "user test thread");
+    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config);
+    NAME_THREAD(new_process->thread.tcb.cptr, "user test thread");
 
     // mint the syscall endpoint into the process
     vka_cspace_make_path(&vka, syscall_ep, &cap_path);
-    sel4utils_mint_cap_to_process(&new_process, cap_path, seL4_AllRights, 0x61);
-    test_printf("buf addr: %p, stack top: %p, stack_size: %d, init esp: %p\n", new_process.thread.ipc_buffer_addr, new_process.thread.stack_top, new_process.thread.stack_size, new_process.thread.initial_stack_pointer);
+    sel4utils_mint_cap_to_process(new_process, cap_path, seL4_AllRights, cur_pid);
+    cur_pid += 1;
+    // test_printf("buf addr: %p, stack top: %p, stack_size: %d, init esp: %p\n", new_process->thread.ipc_buffer_addr, new_process->thread.stack_top, new_process->thread.stack_size, new_process->thread.initial_stack_pointer);
     // start new process
-    FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, &new_process, &vka, &vspace, 0, NULL, 1);
+    FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, new_process, &vka, &vspace, 0, NULL, 1);
 }
 
 void start_kbd_thread() {
@@ -244,9 +205,9 @@ int main(int argc, char *argv[]) {
     interrupt_init();
 
     // init device drivers
-    vga_init();
-    timer_init();
-    kbd_init();
+    vga_init(&io_ops.io_mapper);
+    timer_init(&vka, &vspace, &simple);
+    kbd_init(&vka, &simple);
 
     // init syscall endpoint
     syscallserver_ipc_init();
