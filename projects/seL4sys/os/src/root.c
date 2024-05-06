@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#include <fcntl.h>
 
 // My Lib
 #include "utils.h"
@@ -163,10 +164,29 @@ void load_test_app(const char *app_name, uint8_t app_prio) {
     // mint the syscall endpoint into the process
     vka_cspace_make_path(&vka, syscall_ep, &cap_path);
     sel4utils_mint_cap_to_process(new_process, cap_path, seL4_AllRights, cur_pid);
-    cur_pid += 1;
-    // test_printf("buf addr: %p, stack top: %p, stack_size: %d, init esp: %p\n", new_process->thread.ipc_buffer_addr, new_process->thread.stack_top, new_process->thread.stack_size, new_process->thread.initial_stack_pointer);
+
+    // set up process stdin stdout stderr TODO: complete it
+    for (int i = 0; i < 3; ++i) {
+        new_pcb->file_table[i].inuse = 1;
+        new_pcb->file_table[i].inodeOffset = -1;
+        new_pcb->file_table[i].offset = 0;
+        new_pcb->file_table[i].flags = O_WRONLY;
+    }
+    new_pcb->file_table[STDIN_FILENO].flags = O_RDONLY;
+    
+    // set up process syscall shared memory 
+    reservation_t reserve = vspace_reserve_range_at(&new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
+    int error = vspace_share_mem_at_vaddr(&vspace, &new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, (void *)SYS_SHARED_AREA_VADDR, reserve);
+    assert(error == 0);
+
     // start new process
     FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, new_process, &vka, &vspace, 0, NULL, 1);
+}
+
+void sys_shared_area_setup() {
+    reservation_t reserve = vspace_reserve_range_at(&vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
+    int error = vspace_new_pages_at_vaddr(&vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, reserve);
+    assert(error == 0);
 }
 
 void start_kbd_thread() {
@@ -209,10 +229,6 @@ void start_kbd_thread() {
     FUNC_IFERR("Failed to start kdb thread!\n", seL4_TCB_Resume, kbd_tcb.cptr);
 }
 
-void sys_sharedmem_area_setup() {
-    
-}
-
 int main(int argc, char *argv[]) {
     // init useful variables for rootserver
     rootvars_init();
@@ -227,6 +243,7 @@ int main(int argc, char *argv[]) {
     kbd_init(&vka, &simple);
     disk_init();
     filesystem_init();
+    sys_shared_area_setup();
 
     // init syscall endpoint
     syscallserver_ipc_init();

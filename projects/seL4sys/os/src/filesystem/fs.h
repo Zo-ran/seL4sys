@@ -9,3 +9,4 @@ struct FCB {
 typedef struct FCB FCB;
 
 void filesystem_init();
+int syscall_open(const char *path, int mode);

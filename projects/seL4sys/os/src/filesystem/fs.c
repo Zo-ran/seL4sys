@@ -83,12 +83,13 @@ int syscall_open(const char *path, int mode) {
             else
                 strncpy(father_str, str, fatherlen);
             if (readInode(&sBlock, gDesc, &fatherInode, &fatherInodeOffset, father_str) != 0) 
-                return -1;\
+                return -1;
             int type = (mode & O_DIRECTORY) ? DIRECTORY_TYPE : REGULAR_TYPE;
             ret = allocInode(&sBlock, gDesc, &fatherInode, fatherInodeOffset, &destInode, &destInodeOffset, str + fatherlen + 1, type);
             assert(ret == 0);
         }
     }
+    return destInodeOffset;
 }
 
 void filesystem_init() {

@@ -30,6 +30,7 @@
 
 #include <muslcsys/io.h>
 #include <muslcsys/vsyscall.h>
+#include <shared_area.h>
 #include "arch_stdio.h"
 #include "ipc_wrapper.h"
 
@@ -219,11 +220,11 @@ long sys_open(va_list ap) {
     const char *pathname = va_arg(ap, const char *);
     int flags = va_arg(ap, int);
     mode_t mode = va_arg(ap, mode_t);
-    syscall_ipc_normal(3, SYSCALL_OPEN, pathname, flags);
-    printf("name: %s flags: %p mode: %p\n", pathname, flags, mode);
-    return 0;
+    const char *shared = puts_shared_str(pathname);
+    printf("name: %s flags: %p mode: %p, shared: %p %s\n", pathname, flags, mode, shared, shared);
+    syscall_ipc_normal(3, SYSCALL_OPEN, shared, flags);
     assert(0);
-    return sys_open_impl(pathname, flags, mode);
+    return 0;
 }
 
 long sys_openat(va_list ap) {

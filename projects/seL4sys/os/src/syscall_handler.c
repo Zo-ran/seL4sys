@@ -10,6 +10,7 @@
 #include "syscall_handler.h"
 #include "console/keyboard.h"
 #include "console/vga.h"
+#include "filesystem/fs.h"
 #include "timer.h"
 #include "process.h"
 
@@ -54,7 +55,6 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
         case SYSCALL_BRK: {
             seL4_Word new_brk = seL4_GetMR(1), ret;
             PCB *sender_pcb = pid_getproc(badge);
-            assert(badge == 1);
             if (new_brk == 0) {
                 ret = HEAP_BASE_VADDR;
                 sender_pcb->heap_top = ret;
@@ -77,8 +77,17 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
         case SYSCALL_OPEN: {
             char *pathname = seL4_GetMR(1);
             int flags = seL4_GetMR(2);
+            PCB *sender_pcb = pid_getproc(badge);
             printf("name: %s flags: %p\n", pathname, flags);
-            assert(0);
+            int inodeOffset = syscall_open(pathname, flags);
+            for (int i = 0; i < MAX_FILE_NUM; i++)
+                if (!sender_pcb->file_table[i].inuse) {
+                    sender_pcb->file_table[i].inuse = 1;
+                    sender_pcb->file_table[i].inodeOffset = inodeOffset;
+                    sender_pcb->file_table[i].offset = 0;
+                    sender_pcb->file_table[i].flags = flags;
+                }
+            assert(error == 0);
         }
         default:
             assert(0);
