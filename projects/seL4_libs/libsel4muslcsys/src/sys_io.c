@@ -215,22 +215,24 @@ static long sys_open_impl(const char *pathname, int flags, mode_t mode)
     return fd;
 }
 
-long sys_open(va_list ap)
-{
+long sys_open(va_list ap) {
     const char *pathname = va_arg(ap, const char *);
     int flags = va_arg(ap, int);
     mode_t mode = va_arg(ap, mode_t);
-
+    syscall_ipc_normal(3, SYSCALL_OPEN, pathname, flags);
+    printf("name: %s flags: %p mode: %p\n", pathname, flags, mode);
+    return 0;
+    assert(0);
     return sys_open_impl(pathname, flags, mode);
 }
 
-long sys_openat(va_list ap)
-{
+long sys_openat(va_list ap) {
+    assert(0);
     int dirfd = va_arg(ap, int);
     const char *pathname = va_arg(ap, const char *);
     int flags = va_arg(ap, int);
     mode_t mode = va_arg(ap, mode_t);
-
+        
     if (dirfd != AT_FDCWD) {
         ZF_LOGE("Openat only supports relative path to the current working directory\n");
         return -EINVAL;

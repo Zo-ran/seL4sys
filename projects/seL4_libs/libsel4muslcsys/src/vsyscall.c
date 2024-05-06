@@ -129,12 +129,9 @@ static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
     [__NR_tgkill] = sys_tgkill,
     [__NR_tkill] = sys_tkill,
     [__NR_exit_group] = sys_exit_group,
-#ifdef __NR_open
+
     [__NR_open] = sys_open,
-#endif
-#ifdef __NR_openat
     [__NR_openat] = sys_openat,
-#endif
     [__NR_close] = sys_close,
     [__NR_readv] = sys_readv,
     [__NR_read] = sys_read,

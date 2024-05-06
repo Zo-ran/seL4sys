@@ -15,6 +15,9 @@ add_executable(
     src/syscall_handler.c
     src/console/vga.c
     src/console/keyboard.c
+    src/filesystem/disk.c
+    src/filesystem/ext.c
+    src/filesystem/fs.c
     archive.o
 )
 

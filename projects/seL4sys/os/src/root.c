@@ -31,6 +31,8 @@
 #include "syscall_handler.h"
 #include "console/keyboard.h"
 #include "console/vga.h"
+#include "filesystem/disk.h"
+#include "filesystem/fs.h"
 #include "timer.h"
 #include "process.h"
 
@@ -108,6 +110,16 @@ void outByte(uint16_t port, uint8_t data) {
     io_ops.io_port_ops.io_port_out_fn(io_ops.io_port_ops.cookie, port, 1, data);
 }
 
+uint32_t inLong(uint16_t port) {
+    uint32_t data;
+    io_ops.io_port_ops.io_port_in_fn(io_ops.io_port_ops.cookie, port, 4, &data);
+	return data;
+}
+
+void outLong(uint16_t port, uint32_t data) {
+    io_ops.io_port_ops.io_port_out_fn(io_ops.io_port_ops.cookie, port, 4, data);
+}
+
 void serial_init() {
     platsupport_serial_setup_simple(&vspace, &simple, &vka);
 }
@@ -139,7 +151,8 @@ void handle_syscall_loop() {
 
 void load_test_app(const char *app_name, uint8_t app_prio) {
     int cur_pid = alloc_pid();
-    sel4utils_process_t *new_process = pid_getproc(cur_pid);
+    PCB *new_pcb = pid_getproc(cur_pid);
+    sel4utils_process_t *new_process = &new_pcb->proc;
     sel4utils_process_config_t config = process_config_default_simple(&simple, app_name, app_prio);
     cspacepath_t cap_path;
     
@@ -196,6 +209,10 @@ void start_kbd_thread() {
     FUNC_IFERR("Failed to start kdb thread!\n", seL4_TCB_Resume, kbd_tcb.cptr);
 }
 
+void sys_sharedmem_area_setup() {
+    
+}
+
 int main(int argc, char *argv[]) {
     // init useful variables for rootserver
     rootvars_init();
@@ -206,8 +223,10 @@ int main(int argc, char *argv[]) {
 
     // init device drivers
     vga_init(&io_ops.io_mapper);
-    timer_init(&vka, &vspace, &simple);
+    // timer_init(&vka, &vspace, &simple);
     kbd_init(&vka, &simple);
+    disk_init();
+    filesystem_init();
 
     // init syscall endpoint
     syscallserver_ipc_init();

@@ -48,7 +48,7 @@ long sys_brk(va_list ap) {
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
     if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
-    assert(0);
+        // assert(0);
         seL4_MessageInfo_t reply = syscall_ipc_normal(2, SYSCALL_BRK, newbrk);
         ret = seL4_GetMR(0);
     } else {
@@ -60,7 +60,7 @@ long sys_brk(va_list ap) {
             ret = 0;
         }
     }
-    printf("ret: %p, new brk: %p\n", ret, newbrk);
+    // printf("ret: %p, new brk: %p\n", ret, newbrk);
     return ret;
 }
 

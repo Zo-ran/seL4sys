@@ -53,26 +53,32 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
             break;
         case SYSCALL_BRK: {
             seL4_Word new_brk = seL4_GetMR(1), ret;
-            sel4utils_process_t *sender_proc = pid_getproc(badge);
+            PCB *sender_pcb = pid_getproc(badge);
             assert(badge == 1);
             if (new_brk == 0) {
                 ret = HEAP_BASE_VADDR;
-                sender_proc->heap_top = ret;
-            } else if (sender_proc->heap_top <= ret) {
-                while (sender_proc->heap_top < ret) {
-                    void *vaddr = (void *) sender_proc->heap_top;
-                    reservation_t reserve = vspace_reserve_range_at(&sender_proc->vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
+                sender_pcb->heap_top = ret;
+            } else if (sender_pcb->heap_top <= ret) {
+                while (sender_pcb->heap_top < ret) {
+                    void *vaddr = (void *) sender_pcb->heap_top;
+                    reservation_t reserve = vspace_reserve_range_at(&sender_pcb->proc.vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
                     assert(reserve.res != NULL);
-                    int error = vspace_new_pages_at_vaddr(&sender_proc->vspace, vaddr, 1, PAGE_BITS_4K, reserve);
+                    int error = vspace_new_pages_at_vaddr(&sender_pcb->proc.vspace, vaddr, 1, PAGE_BITS_4K, reserve);
                     assert(error == 0);
-                    sender_proc->heap_top += PAGE_SIZE_4K;
+                    sender_pcb->heap_top += PAGE_SIZE_4K;
                 }
-                ret = sender_proc->heap_top;
+                ret = sender_pcb->heap_top;
             } else {
                 assert(!"munmap currently not implemented");
             }
             seL4_SetMR(0, ret);
             break;
+        }
+        case SYSCALL_OPEN: {
+            char *pathname = seL4_GetMR(1);
+            int flags = seL4_GetMR(2);
+            printf("name: %s flags: %p\n", pathname, flags);
+            assert(0);
         }
         default:
             assert(0);

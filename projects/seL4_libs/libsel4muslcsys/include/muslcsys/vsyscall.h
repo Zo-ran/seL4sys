@@ -20,6 +20,7 @@
 #define SYSCALL_SLEEP 2
 #define SYSCALL_GETIME 3
 #define SYSCALL_BRK 4
+#define SYSCALL_OPEN 5
 
 typedef long (*muslcsys_syscall_t)(va_list);
 
