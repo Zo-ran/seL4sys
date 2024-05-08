@@ -39,3 +39,4 @@ long sys_writev(va_list ap);
 long sys_madvise(va_list ap);
 long sys_nanosleep(va_list ap);
 long sys_clock_gettime(va_list ap);
+long sys_unlink(va_list ap);

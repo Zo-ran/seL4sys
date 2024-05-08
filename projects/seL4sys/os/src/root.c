@@ -11,6 +11,7 @@
 #include <sel4utils/vspace.h>
 #include <sel4utils/process.h>
 #include <sel4utils/vspace_internal.h>
+#include <sel4utils/helpers.h>
 
 #include <sel4runtime.h>
 
@@ -34,6 +35,7 @@
 #include "console/vga.h"
 #include "filesystem/disk.h"
 #include "filesystem/fs.h"
+#include "vm/vmfault_handler.h"
 #include "timer.h"
 #include "process.h"
 
@@ -43,6 +45,7 @@ vka_t vka;
 allocman_t *allocman;
 vspace_t vspace;
 ps_io_ops_t io_ops;
+vka_object_t fault_ep;
 seL4_CPtr syscall_ep;
 seL4_CPtr root_cspace_cap;
 seL4_CPtr root_vspace_cap;
@@ -97,6 +100,7 @@ void rootvars_init() {
 void syscallserver_ipc_init() {
     vka_object_t obj = {0};
     FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &obj);
+    FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &fault_ep);
     syscall_ep = obj.cptr;
 }
 
@@ -156,9 +160,10 @@ void load_test_app(const char *app_name, uint8_t app_prio) {
     sel4utils_process_t *new_process = &new_pcb->proc;
     sel4utils_process_config_t config = process_config_default_simple(&simple, app_name, app_prio);
     cspacepath_t cap_path;
-    
+    config.create_fault_endpoint = false;
+    config.fault_endpoint = fault_ep;
     // configure user test process
-    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config);
+    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config, cur_pid);
     NAME_THREAD(new_process->thread.tcb.cptr, "user test thread");
 
     // mint the syscall endpoint into the process
@@ -189,44 +194,63 @@ void sys_shared_area_setup() {
     assert(error == 0);
 }
 
-void start_kbd_thread() {
-    // alloc new tcb
-    vka_object_t kbd_tcb;
+void start_system_thread(const char *name, sel4utils_thread_entry_fn entry_point, void *arg0, void *arg1, void *arg2) {
+    vka_object_t tcb;
     seL4_CPtr ipc_frame;
     seL4_UserContext regs = {0};
     size_t regs_size = sizeof(seL4_UserContext) / sizeof(seL4_Word);
+    FUNC_IFERR("Failed to alloc tcb!\n", vka_alloc_tcb, &vka, &tcb);
+    NAME_THREAD(tcb.cptr, name);
+    
+    void *vaddr = vspace_new_pages(&vspace, seL4_AllRights, 1, PAGE_BITS_4K);
+    ipc_frame = vspace_get_cap(&vspace, vaddr);
 
-    FUNC_IFERR("Failed to alloc tcb!\n", vka_alloc_tcb, &vka, &kbd_tcb);
-    NAME_THREAD(kbd_tcb.cptr, "keyboard IRQ handle thread");
+    FUNC_IFERR("Failed to configure new TCB!\n", seL4_TCB_Configure, tcb.cptr, seL4_CapNull, root_cspace_cap, seL4_NilData, root_vspace_cap, seL4_NilData, (seL4_Word) vaddr, ipc_frame);
 
-    // set thread's ipc buffer 
-    void *vaddr = sel4utils_new_pages(&vspace, seL4_AllRights, 1, PAGE_BITS_4K);
-    ipc_frame = sel4utils_get_cap(&vspace, vaddr);
-
-    // configure tcb
-    FUNC_IFERR("Failed to configure new TCB!\n", seL4_TCB_Configure, kbd_tcb.cptr, seL4_CapNull, root_cspace_cap, seL4_NilData, root_vspace_cap, seL4_NilData, (seL4_Word) vaddr, ipc_frame);
-
-    // calculate stack
+    void *stack = vspace_new_pages(&vspace, seL4_AllRights, 1, PAGE_BITS_4K);
     const int stack_alignment_requirement = sizeof(seL4_Word) * 2;
-    uintptr_t kbd_stack_top = (uintptr_t)kbd_stack + sizeof(kbd_stack);
-    ZF_LOGF_IF(kbd_stack_top % (stack_alignment_requirement) != 0, "Stack top isn't aligned correctly to a %dB boundary.\n", stack_alignment_requirement);
+    uintptr_t stack_top = (uintptr_t)stack + PAGE_SIZE_4K;
+    ZF_LOGF_IF(stack_top % (stack_alignment_requirement) != 0, "Stack top isn't aligned correctly to a %dB boundary.\n", stack_alignment_requirement);
 
-    // set regs
-    sel4utils_set_stack_pointer(&regs, kbd_stack_top);
-    sel4utils_set_instruction_pointer(&regs, (seL4_Word)kbd_irq_handle_mainloop);
-    FUNC_IFERR("Failed to write to the thread's registers!\n", seL4_TCB_WriteRegisters, kbd_tcb.cptr, 0, 0, regs_size, &regs);
+    sel4utils_arch_init_local_context(entry_point, arg0, arg1, arg2, (void *)stack_top, &regs);
+    FUNC_IFERR("Failed to write to the thread's registers!\n", seL4_TCB_WriteRegisters, tcb.cptr, 0, 0, regs_size, &regs);
 
-    // set thread's local storage (TLS) region for the new thread to store the ipc buffer pointer
-    uintptr_t tls = sel4runtime_write_tls_image(tls_region);
+    void *tls_mem = vspace_new_pages(&vspace, seL4_AllRights, 1, PAGE_BITS_4K);
+
+    uintptr_t tls = sel4runtime_write_tls_image(tls_mem);
     seL4_IPCBuffer *ipcbuf = (seL4_IPCBuffer*)vaddr;
     FUNC_IFERR("Failed to set ipc buffer in TLS of new thread!\n", sel4runtime_set_tls_variable, tls, __sel4_ipc_buffer, ipcbuf);
-    FUNC_IFERR("Failed to set TLS base", seL4_TCB_SetTLSBase, kbd_tcb.cptr, tls);
+    FUNC_IFERR("Failed to set TLS base", seL4_TCB_SetTLSBase, tcb.cptr, tls);
 
     // set priority
-    FUNC_IFERR("Failed to set the priority!\n", seL4_TCB_SetPriority, kbd_tcb.cptr, seL4_CapInitThreadTCB, seL4_MaxPrio);
+    FUNC_IFERR("Failed to set the priority!\n", seL4_TCB_SetPriority, tcb.cptr, seL4_CapInitThreadTCB, seL4_MaxPrio);
 
     // start kbd thread
-    FUNC_IFERR("Failed to start kdb thread!\n", seL4_TCB_Resume, kbd_tcb.cptr);
+    FUNC_IFERR("Failed to new thread!\n", seL4_TCB_Resume, tcb.cptr);
+}
+
+void test() {
+    void *vaddr = (void *)0x1000;
+    void *vaddr0 = (void *)0x10000;
+    reservation_t reserve = vspace_reserve_range_at(&vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
+    int error = vspace_new_pages_at_vaddr(&vspace, vaddr, 1, PAGE_BITS_4K, reserve);
+    seL4_CPtr ptr = vspace_get_cap(&vspace, vaddr);
+    seL4_CPtr new_ptr;
+    error = vka_cspace_alloc(&vka, &new_ptr);
+    error = seL4_CNode_Copy(
+        seL4_CapInitThreadCNode, new_ptr, seL4_WordBits, 
+        seL4_CapInitThreadCNode, ptr, seL4_WordBits,
+        seL4_AllRights
+    );
+    
+    vspace_unmap_pages(&vspace, vaddr, 1, PAGE_BITS_4K, &vka);
+    reservation_t reserve0 = vspace_reserve_range_at(&vspace, vaddr0, PAGE_SIZE_4K, seL4_AllRights, 1);
+    error = vspace_map_pages_at_vaddr(&vspace, &new_ptr, NULL, vaddr0, 1, PAGE_BITS_4K, reserve0);
+    char *test_buf = (char *)vaddr0;
+    memset(test_buf, 0, 1000);
+    assert(error == 0);
+    printf("oooook\n");
+    while (1);
 }
 
 int main(int argc, char *argv[]) {
@@ -250,9 +274,13 @@ int main(int argc, char *argv[]) {
 
     // load user apps
     load_test_app("test", 1);
-
+    // test();    
     // start keyboard irq handle thread
-    start_kbd_thread();
+    // start_kbd_thread();
+    // handle_vmfault(fault_ep.cptr);
+    start_system_thread("kdb irq handler", kbd_irq_handle_mainloop, 0, 0, 0);
+    start_system_thread("vmfault handler", handle_vmfault, (void *)fault_ep.cptr, 0, 0);
+
     seL4_DebugDumpScheduler();
 
     // wait and handle syscall

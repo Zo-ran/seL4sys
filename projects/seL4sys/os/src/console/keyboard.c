@@ -231,7 +231,7 @@ void keytable_init() {
 	keyTable[NCAPS_NSH][KSPA_P]=' ';  keyTable[NCAPS_SH][KSPA_P]=' ';   keyTable[CAPS_NSH][KSPA_P]=' ';   keyTable[CAPS_SH][KSPA_P]=' ';
 }
 
-void kbd_irq_handle_mainloop() {
+void kbd_irq_handle_mainloop(void *unuse0, void *unuse1, void *unuse2) {
     while (1) {
         seL4_Wait(kbd_ntfn.cptr, NULL);
         seL4_IRQHandler_Ack(kbd_irq.capPtr);

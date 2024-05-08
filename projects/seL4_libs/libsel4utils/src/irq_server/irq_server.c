@@ -222,7 +222,7 @@ thread_id_t irq_server_thread_new(irq_server_t *irq_server, seL4_CPtr provided_n
     sel4utils_thread_config_t config = thread_config_default(irq_server->simple, irq_server->cspace,
                                                              seL4_NilData, 0, irq_server->priority);
     error = sel4utils_configure_thread_config(irq_server->vka, irq_server->vspace,
-                                              irq_server->vspace, config, &(new_thread->thread));
+                                              irq_server->vspace, config, &(new_thread->thread), NULL);
     if (error) {
         ZF_LOGE("Failed to configure IRQ server thread");
         goto fail;

@@ -7,23 +7,27 @@
 #include <autoconf.h>
 #include <vspace/vspace.h>
 #include <utils/page.h>
+#include <sel4utils/process.h>
 
-void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages)
-{
+void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages, void *proc) {
     int error = 0;
     uintptr_t stack_bottom = STACK_TOP_VADDR - STACK_SIZE;
-    reservation_t reserve = vspace_reserve_range_at(vspace, (void *) stack_bottom, n_pages * PAGE_SIZE_4K, seL4_AllRights, 1);
+    uintptr_t cur = stack_bottom;
+    sel4utils_process_t *process = proc;
 
-    if (reserve.res == NULL) {
-        return NULL;
-    }
-
-    /* create and map the pages */
-    error = vspace_new_pages_at_vaddr(vspace, (void *) stack_bottom, n_pages, seL4_PageBits, reserve);
-
-    if (error) {
-        vspace_free_reservation(vspace, reserve);
-        return NULL;
+    for (int i = 0; i < n_pages; ++i) {
+        reservation_t reserve = vspace_reserve_range_at(vspace, (void *) cur, PAGE_SIZE_4K, seL4_AllRights, 1);
+        assert(reserve.res != NULL);
+        error = vspace_new_pages_at_vaddr(vspace, (void *) cur, 1, PAGE_BITS_4K, reserve);
+        if (process != NULL) {
+            process->vframes[process->v_pos].reserve = reserve;
+            process->vframes[process->v_pos].dirty = 0;
+            process->vframes[process->v_pos].accessed = 0;
+            process->vframes[process->v_pos].swap_filename = NULL;
+            process->v_pos += 1;
+        }
+        assert(error == 0);
+        cur += PAGE_SIZE_4K;
     }
 
     return (void *)(stack_bottom + (n_pages * PAGE_SIZE_4K));
@@ -44,7 +48,7 @@ void vspace_free_sized_stack(vspace_t *vspace, void *stack_top, size_t n_pages)
 void *vspace_new_ipc_buffer(vspace_t *vspace, seL4_CPtr *page) {
     void *vaddr = (void *) IPC_BUFFER_VADDR;
     reservation_t reserve = vspace_reserve_range_at(vspace, vaddr, IPC_BUFFER_SIZE, seL4_AllRights, 1);
-
+    
     if (reserve.res == NULL) {
         return NULL;
     }

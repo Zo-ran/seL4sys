@@ -21,3 +21,9 @@ void *puts_shared_str(const char *str) {
     puts_shared_data(str, strlen(str) + 1);
     return ret + (void *)SYS_SHARED_AREA_VADDR;
 }
+
+void *get_shared_area(size_t len) {
+    size_t ret = first_empty_pos;
+    assert(first_empty_pos + len < SYS_SHARED_AREA_SIZE);
+    return ret + (void *)SYS_SHARED_AREA_VADDR;
+}

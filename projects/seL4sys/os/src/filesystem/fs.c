@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include "ext.h"
+#include "fs.h"
 
 SuperBlock sBlock;
 GroupDesc gDesc[MAX_GROUP_NUM];
@@ -24,27 +25,6 @@ GroupDesc gDesc[MAX_GROUP_NUM];
 // #define O_NOFOLLOW  0400000
 // #define O_CLOEXEC  02000000
 
-
-static inline int stringChrR(const char *string, char token, int *size) {
-	int i = 0;
-	if (string == NULL) {
-		*size = 0;
-		return -1;
-	}
-	while (string[i] != 0)
-		i ++;
-	*size = i;
-	while (i > -1) {
-		if (token == string[i]) {
-			*size = i;
-			return 0;
-		}
-		else
-			i --;
-	}
-	return -1;
-}
-
 void ls(const char *filename) {
     Inode inode;
 	int inodeOffset = 0;
@@ -56,50 +36,156 @@ void ls(const char *filename) {
     }
 }
 
+static inline int find_last_of(const char *str, char token, int end) {
+    int last_index = -1, len = strlen(str);
+    end = end < len ? end : (len - 1);
+    for (int i = end; i >= 0; --i)
+        if (str[i] == token)
+            return i;
+    return -1;
+}
+
+static inline void get_father_path(const char *src, char *father) {
+    int src_len = strlen(src);
+    int last_pos = find_last_of(src, '/', src_len - 2);
+    if (last_pos == 0) {
+        father[0] = '/';
+        father[1] = 0;
+    } else {
+        strncpy(father, src, last_pos);
+        father[last_pos] = 0;
+    }
+}
+
+static inline int is_dir_path(const char *path) {
+    return (path[strlen(path) - 1] == '/');
+}
+
+static inline int is_dir_mode(int mode) {
+    return (mode & O_DIRECTORY);
+}
+
+static inline int is_empty_dir(Inode *inode) {
+    DirEntry d;
+    return (getDirEntry(&sBlock, inode, 0, &d) != 0);
+}
+
+static inline int mode_can_read(int mode) {
+    return ((mode & 0x1) == 0);
+}
+
+static inline int  mode_can_write(int mode) {
+    return ((mode & 0b11) != O_RDONLY);
+}
+
+static inline int min(int a, int b, int c) {
+    return (a < b) ? ((a < c) ? a : c) : ((b < c) ? b : c);
+}
+
 int syscall_open(const char *path, int mode) {
     Inode fatherInode, destInode;
 	int fatherInodeOffset = 0, destInodeOffset = 0;
-    int ret, destlen = strlen(path), fatherlen = 0;
-    char str[NAME_LENGTH] = "\0";
-    strcpy(str, path);
+    int ret, destlen = strlen(path);
     if (readInode(&sBlock, gDesc, &destInode, &destInodeOffset, path) != 0) {
         // File not exists 
         // Create it!
         if (!(mode & O_CREAT))
             return -1;
-        if (mode & O_CREAT) {
-            if (str[destlen - 1] == '/') {
-                if (mode & O_DIRECTORY) {
-                    str[destlen - 1] = 0;
-                    destlen -= 1;
-                } else {
-                    return -1;
-                }
-            }
-            char father_str[NAME_LENGTH] = "\0";
-            stringChrR(str, '/', &fatherlen);
-            if (fatherlen == 0)
-                father_str[0] = '/';
-            else
-                strncpy(father_str, str, fatherlen);
-            if (readInode(&sBlock, gDesc, &fatherInode, &fatherInodeOffset, father_str) != 0) 
-                return -1;
-            int type = (mode & O_DIRECTORY) ? DIRECTORY_TYPE : REGULAR_TYPE;
-            ret = allocInode(&sBlock, gDesc, &fatherInode, fatherInodeOffset, &destInode, &destInodeOffset, str + fatherlen + 1, type);
-            assert(ret == 0);
-        }
+        if (is_dir_path(path) && !is_dir_mode(mode))
+            return -1;
+        char father_path[NAME_LENGTH] = "\0";
+        get_father_path(path, father_path);
+        if (readInode(&sBlock, gDesc, &fatherInode, &fatherInodeOffset, father_path) != 0) 
+            return -1;
+        int type = is_dir_mode(mode) ? DIRECTORY_TYPE : REGULAR_TYPE;
+        int last_slash = find_last_of(path, '/', destlen - 1);
+        ret = allocInode(&sBlock, gDesc, &fatherInode, fatherInodeOffset, &destInode, &destInodeOffset, path + last_slash + 1, type);
+        assert(ret == 0);
     }
     return destInodeOffset;
 }
 
+int syscall_unlink(const char *path) {
+    Inode fatherInode, destInode;
+	int fatherInodeOffset = 0, destInodeOffset = 0;
+    if (readInode(&sBlock, gDesc, &destInode, &destInodeOffset, path) != 0)
+        return -1;
+    if (destInode.type == DIRECTORY_TYPE && !is_empty_dir(&destInode))
+        return -1;
+    char father_path[NAME_LENGTH] = "\0";
+    get_father_path(path, father_path);
+    if (readInode(&sBlock, gDesc, &fatherInode, &fatherInodeOffset, father_path) != 0)
+        return -1;
+    int last_slash = find_last_of(path, '/', strlen(path) - 1);
+    return freeInode(&sBlock, gDesc, &fatherInode, fatherInodeOffset, &destInode, &destInodeOffset, path + last_slash + 1, destInode.type);
+}
+
+int syscall_readfile(FCB *fcb, int fd, char *str, int max_len) {
+    if (fd < 3 || fd >= MAX_FILE_NUM || !fcb->inuse || !mode_can_read(fcb->flags))
+        return -1;
+    uint8_t buffer[sBlock.blockSize];
+    int quotient = fcb->offset / sBlock.blockSize;
+	int remainder = fcb->offset % sBlock.blockSize;
+    Inode inode;
+    read_disk(&inode, sizeof(Inode), 1, fcb->inodeOffset);
+    if (inode.size <= fcb->offset)
+        return 0;
+    int read_len = 0;
+    
+    while (max_len > read_len && fcb->offset < inode.size) {
+        readBlock(&sBlock, &inode, quotient++, buffer);
+        int max_read_size = min(sBlock.blockSize - remainder, inode.size - fcb->offset, max_len - read_len);
+        memcpy(str + read_len, buffer + remainder, max_read_size);
+        fcb->offset += max_read_size;
+        read_len += max_read_size;
+        remainder = 0;
+	}
+    return read_len;
+}
+
+int syscall_writefile(FCB *fcb, int fd, const char *str, int len) {
+    if (fd < 3 || fd >= MAX_FILE_NUM || !fcb->inuse || !mode_can_write(fcb->flags))
+        return -1;
+    uint8_t buffer[sBlock.blockSize];
+    int quotient = fcb->offset / sBlock.blockSize;
+	int remainder = fcb->offset % sBlock.blockSize;
+    Inode inode;
+    read_disk(&inode, sizeof(Inode), 1, fcb->inodeOffset);
+    int write_len = 0;
+    while (len > write_len) {
+        if (quotient >= inode.blockCount) {
+            assert(allocBlock(&sBlock, gDesc, &inode, fcb->inodeOffset) == 0);
+        }
+        readBlock(&sBlock, &inode, quotient, buffer);
+        int max_write_size = (sBlock.blockSize - remainder) < (len - write_len) ? (sBlock.blockSize - remainder) : (len - write_len);
+        memcpy(buffer + remainder, str + write_len, max_write_size);
+        writeBlock(&sBlock, &inode, quotient, buffer);
+        quotient += 1;
+        write_len += max_write_size;
+        fcb->offset += max_write_size;
+        inode.size = inode.size > fcb->offset ? inode.size : fcb->offset;
+        remainder = 0;
+    }
+    readBlock(&sBlock, &inode, 0, buffer);
+    write_disk(&inode, sizeof(Inode), 1, fcb->inodeOffset);
+    return len;
+}
+
+int syscall_lseek(FCB *fcb, int fd, int offset, int whence) {
+    if (fd < 3 || fd >= MAX_FILE_NUM || !fcb->inuse)
+        return -1;
+    Inode inode;
+    read_disk(&inode, sizeof(Inode), 1, fcb->inodeOffset);
+    switch (whence) {
+        case SEEK_SET: fcb->offset = offset; break;
+        case SEEK_CUR: fcb->offset += offset; break;
+        case SEEK_END: fcb->offset = inode.size + offset; break;
+        default: return -1; 
+    }
+    return fcb->offset;
+}
+
 void filesystem_init() {
 	readGroupHeader(&sBlock, gDesc);
-    // int c = open("/fuck", O_CREAT);
     ls("/");
-    // printf("open ret: %d\n", c);
-	printf("%d\n", sBlock.sectorNum); 
-	printf("%d\n", sBlock.inodeNum);
-	printf("%d\n", sBlock.availInodeNum);
-	printf("%d\n", sBlock.availBlockNum);
-    printf("%p %p %p %p %p\n", O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_DIRECTORY);
 }

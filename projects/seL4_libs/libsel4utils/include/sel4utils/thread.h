@@ -78,7 +78,7 @@ int sel4utils_configure_thread(vka_t *vka, vspace_t *parent, vspace_t *alloc, se
  * As per sel4utils_configure_thread, but using a config struct.
  */
 int sel4utils_configure_thread_config(vka_t *vka, vspace_t *parent, vspace_t *alloc,
-                                      sel4utils_thread_config_t config, sel4utils_thread_t *res);
+                                      sel4utils_thread_config_t config, sel4utils_thread_t *res, void *proc);
 
 /**
  * Start a thread, allocating any resources required.

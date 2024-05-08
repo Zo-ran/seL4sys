@@ -132,6 +132,10 @@ typedef union DirEntry DirEntry;
 
 
 int readGroupHeader(SuperBlock *superBlock, GroupDesc *groupDesc);
+int readBlock (SuperBlock *superBlock, Inode *inode, int blockIndex, uint8_t *buffer);
+int writeBlock (SuperBlock *superBlock, Inode *inode, int blockIndex, uint8_t *buffer);
 int readInode (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *destInode, int *inodeOffset, const char *destFilePath);
+int allocBlock (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *inode, int inodeOffset);
 int allocInode (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *fatherInode, int fatherInodeOffset, Inode *destInode, int *destInodeOffset, const char *destFilename, int destFiletype);
+int freeInode (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *fatherInode, int fatherInodeOffset, Inode *destInode, int *destInodeOffset, const char *destFilename, int destFiletype);
 int getDirEntry (SuperBlock *superBlock, Inode *inode, int dirIndex, DirEntry *destDirEntry);

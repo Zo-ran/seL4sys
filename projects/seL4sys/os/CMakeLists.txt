@@ -18,6 +18,7 @@ add_executable(
     src/filesystem/disk.c
     src/filesystem/ext.c
     src/filesystem/fs.c
+    src/vm/vmfault_handler.c
     archive.o
 )
 

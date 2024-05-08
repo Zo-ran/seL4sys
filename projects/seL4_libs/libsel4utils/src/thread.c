@@ -34,11 +34,11 @@ int sel4utils_configure_thread(vka_t *vka, vspace_t *parent, vspace_t *alloc, se
     config = thread_config_fault_endpoint(config, fault_endpoint);
     config = thread_config_cspace(config, cspace, cspace_root_data);
     config = thread_config_create_reply(config);
-    return sel4utils_configure_thread_config(vka, parent, alloc, config, res);
+    return sel4utils_configure_thread_config(vka, parent, alloc, config, res, NULL);
 }
 
 int sel4utils_configure_thread_config(vka_t *vka, vspace_t *parent, vspace_t *alloc,
-                                      sel4utils_thread_config_t config, sel4utils_thread_t *res)
+                                      sel4utils_thread_config_t config, sel4utils_thread_t *res, void *proc)
 {
     memset(res, 0, sizeof(sel4utils_thread_t));
 
@@ -140,7 +140,7 @@ int sel4utils_configure_thread_config(vka_t *vka, vspace_t *parent, vspace_t *al
     }
 
     if (res->stack_size > 0) {
-        res->stack_top = vspace_new_sized_stack(alloc, res->stack_size);
+        res->stack_top = vspace_new_sized_stack(alloc, res->stack_size, proc);
 
         if (res->stack_top == NULL) {
             ZF_LOGE("Stack allocation failed!");

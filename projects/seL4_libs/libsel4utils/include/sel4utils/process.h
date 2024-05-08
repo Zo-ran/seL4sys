@@ -26,6 +26,15 @@ struct object_node {
     object_node_t *next;
 };
 
+typedef struct VFrame {
+    reservation_t reserve;
+    seL4_Word accessed;
+    seL4_Word dirty;
+    const char *swap_filename;
+} VFrame;
+
+#define MAX_VFRAME_NUM 1024
+
 typedef struct {
     vka_object_t pd;
     vspace_t vspace;
@@ -54,6 +63,8 @@ typedef struct {
     bool own_vspace;
     bool own_cspace;
     bool own_ep;
+    int v_pos;
+    VFrame vframes[MAX_VFRAME_NUM];
 } sel4utils_process_t;
 
 /* sel4utils processes start with some caps in their cspace.
@@ -185,7 +196,7 @@ int sel4utils_configure_process(sel4utils_process_t *process, vka_t *vka, vspace
  * @return 0 on success, -1 on error.
  */
 int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *target_vka,
-                                       vspace_t *spawner_vspace, sel4utils_process_config_t config);
+                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid);
 
 /**
  * Copy a cap into a process' cspace.

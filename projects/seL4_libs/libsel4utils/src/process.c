@@ -392,7 +392,7 @@ int sel4utils_configure_process(sel4utils_process_t *process, vka_t *vka,
                                 vspace_t *vspace, const char *image_name)
 {
     sel4utils_process_config_t config = process_config_default(image_name, seL4_CapInitThreadASIDPool);
-    return sel4utils_configure_process_custom(process, vka, vspace, config);
+    return sel4utils_configure_process_custom(process, vka, vspace, config, 0);
 }
 
 static int create_reservations(vspace_t *vspace, int num, sel4utils_elf_region_t regions[])
@@ -434,7 +434,7 @@ static seL4_CPtr assign_asid_pool(seL4_CPtr asid_pool, seL4_CPtr pd)
 }
 
 static int create_cspace(vka_t *vka, int size_bits, sel4utils_process_t *process,
-                         seL4_Word cspace_root_data, seL4_CPtr asid_pool)
+                         seL4_Word cspace_root_data, seL4_CPtr asid_pool, int pid)
 {
     /* create a cspace */
     int error = vka_alloc_cnode_object(vka, size_bits, &process->cspace);
@@ -456,7 +456,8 @@ static int create_cspace(vka_t *vka, int size_bits, sel4utils_process_t *process
     /* copy fault endpoint cap into process cspace */
     if (process->fault_endpoint.cptr != 0) {
         vka_cspace_make_path(vka, process->fault_endpoint.cptr, &src);
-        slot = sel4utils_copy_path_to_process(process, src);
+        slot = sel4utils_mint_cap_to_process(process, src, seL4_AllRights, pid);
+        // slot = sel4utils_copy_path_to_process(process, src);
         assert(slot == SEL4UTILS_ENDPOINT_SLOT);
     } else {
         /* no fault endpoint, update slot so next will work */
@@ -493,7 +494,7 @@ static int create_fault_endpoint(vka_t *vka, sel4utils_process_t *process)
 }
 
 int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *vka,
-                                       vspace_t *spawner_vspace, sel4utils_process_config_t config)
+                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid)
 {
     int error;
     sel4utils_alloc_data_t *data = NULL;
@@ -529,7 +530,7 @@ int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *vka,
     process->own_cspace = config.create_cspace;
     if (config.create_cspace) {
         if (create_cspace(vka, config.one_level_cspace_size_bits, process, cspace_root_data,
-                          config.asid_pool) != 0) {
+                          config.asid_pool, pid) != 0) {
             goto error;
         }
     } else {
@@ -608,7 +609,7 @@ int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *vka,
     thread_config.sched_params = config.sched_params;
     thread_config.create_reply = config.create_cspace;
     error = sel4utils_configure_thread_config(vka, spawner_vspace, &process->vspace, thread_config,
-                                              &process->thread);
+                                              &process->thread, process);
     if (error) {
         ZF_LOGE("ERROR: failed to configure thread for new process %d\n", error);
         goto error;

@@ -146,7 +146,7 @@ void *vspace_new_pages_with_config(vspace_t *vspace, vspace_new_pages_config_t *
  * @return virtual address of the top of the created stack.
  *         NULL on failure.
  */
-void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages);
+void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages, void *proc);
 
 /**
  * Callback invoked when accessing a page through vspace_access_page_with_callback
@@ -183,7 +183,7 @@ int vspace_access_page_with_callback(vspace_t *from, vspace_t *to, void *access_
 
 static inline void *vspace_new_stack(vspace_t *vspace)
 {
-    return vspace_new_sized_stack(vspace, BYTES_TO_4K_PAGES(CONFIG_SEL4UTILS_STACK_SIZE));
+    return vspace_new_sized_stack(vspace, BYTES_TO_4K_PAGES(CONFIG_SEL4UTILS_STACK_SIZE), NULL);
 }
 
 /**

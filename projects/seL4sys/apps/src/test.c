@@ -7,11 +7,29 @@
 #include <string.h>
 #include <unistd.h>
 
+char buf[4096] = "abcdefg";
+char ret[4096];
+
+void fs_test() {
+    remove("/fuck.txt");
+    int fd = open("/fuck.txt", O_RDWR | O_CREAT);
+    int c = write(fd, buf, 10);
+    printf("writelen: %d\n", c);
+    
+    int rd = open("/fuck.txt", O_RDONLY);
+    lseek(rd, -5, SEEK_END);
+    int n = read(rd, ret, 100);
+    printf("read: %s, n: %d\n", ret, n);
+    printf("finish\n");
+}
+
+void vm_test() {
+    char *str = malloc(20);
+    str[0] = '1';
+    printf("finish\n");
+}
+
 int main() {
-    // FILE *f = fopen()
-    char *str = malloc(100);
-    char d[] = "hello world";
-    int fd = open("/fuck", O_RDWR);
-    strcpy(str, d);
-    printf("%p %p %p %p %p\n", O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_DIRECTORY);
+    printf("finish\n");
+    vm_test();
 }

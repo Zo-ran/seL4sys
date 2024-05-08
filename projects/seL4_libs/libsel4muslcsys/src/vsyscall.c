@@ -138,6 +138,7 @@ static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
     [__NR_ioctl] = sys_ioctl,
     [__NR_prlimit64] = sys_prlimit64,
     [__NR_lseek] = sys_lseek,
+    [__NR_unlink] = sys_unlink,
 #ifdef __NR__llseek
     [__NR__llseek] = sys__llseek,
 #endif

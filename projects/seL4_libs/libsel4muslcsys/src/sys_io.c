@@ -217,14 +217,12 @@ static long sys_open_impl(const char *pathname, int flags, mode_t mode)
 }
 
 long sys_open(va_list ap) {
-    const char *pathname = va_arg(ap, const char *);
+    const char *path = va_arg(ap, char *);
     int flags = va_arg(ap, int);
     mode_t mode = va_arg(ap, mode_t);
-    const char *shared = puts_shared_str(pathname);
-    printf("name: %s flags: %p mode: %p, shared: %p %s\n", pathname, flags, mode, shared, shared);
+    const char *shared = puts_shared_str(path);
     syscall_ipc_normal(3, SYSCALL_OPEN, shared, flags);
-    assert(0);
-    return 0;
+    return seL4_GetMR(0);
 }
 
 long sys_openat(va_list ap) {
@@ -242,25 +240,18 @@ long sys_openat(va_list ap) {
     return sys_open_impl(pathname, flags, mode);
 }
 
-long sys_close(va_list ap)
-{
+long sys_close(va_list ap) {
     int fd = va_arg(ap, int);
-    if (fd < FIRST_USER_FD) {
-        assert(!"not implemented");
-        return -EBADF;
-    }
+    syscall_ipc_normal(2, SYSCALL_CLOSE, fd);
+    return seL4_GetMR(0);
+}
 
-    if (!valid_fd(fd)) {
-        return -EBADF;
-    }
-
-    muslcsys_fd_t *fds = get_fd_struct(fd);
-
-    if (fds->filetype == FILE_TYPE_CPIO) {
-        free(fds->data);
-    }
-    add_free_fd(fd);
-    return 0;
+long sys_unlink(va_list ap) {
+    const char *path = va_arg(ap, char *);
+    const char *shared = puts_shared_str(path);
+    syscall_ipc_normal(2, SYSCALL_UNLINK, shared);
+    return seL4_GetMR(0);
+    assert(0);
 }
 
 
@@ -273,60 +264,25 @@ write_buf_fn sel4muslcsys_register_stdio_write_fn(write_buf_fn write_fn)
     return old;
 }
 
-
-/* Writev syscall implementation for muslc. Only implemented for stdin and stdout. */
 long sys_writev(va_list ap) {
     int fildes = va_arg(ap, int);
     struct iovec *iov = va_arg(ap, struct iovec *);
     int iovcnt = va_arg(ap, int);
 
-    long long sum = 0;
     ssize_t ret = 0;
 
-    /* The iovcnt argument is valid if greater than 0 and less than or equal to IOV_MAX. */
-    if (iovcnt <= 0 || iovcnt > IOV_MAX) {
-        return -EINVAL;
-    }
-
-    /* The sum of iov_len is valid if less than or equal to SSIZE_MAX i.e. cannot overflow
-       a ssize_t. */
-    for (int i = 0; i < iovcnt; i++) {
-        sum += (long long)iov[i].iov_len;
-        if (sum > SSIZE_MAX) {
-            return -EINVAL;
-        }
-    }
-
-    /* If all the iov_len members in the array are 0, return 0. */
-    if (!sum) {
-        return 0;
-    }
-
-    /* Write the buffer to console if the fd is for stdout or stderr. */
-    if (fildes == STDOUT_FILENO || fildes == STDERR_FILENO) {
-        if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
-            for (int i = 0; i < iovcnt; ++i) {
-            const char *d = iov[i].iov_base;
-            syscall_ipc_write(d, iov[i].iov_len);
-            ret += seL4_GetMR(0);
+    if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
+        for (int i = 0; i < iovcnt; ++i)
+            if (iov[i].iov_len != 0) {
+                const char *shared = puts_shared_str(iov[i].iov_base);
+                syscall_ipc_normal(4, SYSCALL_WRITE, fildes, iov[i].iov_len, shared);
+                ret += seL4_GetMR(0);
             }
-        } else {
-            if (stdio_write == NULL) {
-                ZF_LOGD("No standard out function registered");
-            }
-            for (int i = 0; i < iovcnt; i++) {
-                if (stdio_write == NULL) {
-                    ret += iov[i].iov_len;
-                } else {
-                    ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
-                }
-            }
-        }
-    } else {
-        assert(!"Not implemented");
-        return -EBADF;
+    } else if (fildes == STDOUT_FILENO || fildes == STDERR_FILENO) {
+        assert(stdio_write != NULL);
+        for (int i = 0; i < iovcnt; i++)
+            ret += stdio_write(iov[i].iov_base, iov[i].iov_len);
     }
-
     return ret;
 }
 
@@ -345,48 +301,24 @@ long sys_readv(va_list ap) {
     int iovcnt = va_arg(ap, int);
     long read = 0;
     
-    if (fd == STDIN_FILENO) {
-        for (int i = 0; i < iovcnt; i++) {
-            int nr = 0;
-            if (iov[i].iov_len != 0) {
-                seL4_MessageInfo_t reply = syscall_ipc_normal(3, SYSCALL_READ, STDIN_FILENO, iov[i].iov_len);
-                char *d = iov[i].iov_base;
-                nr = seL4_MessageInfo_get_length(reply);
-                for (int i = 0; i < nr; ++i) {
-                    d[i] = seL4_GetMR(i);
-                }
-            }
-            if (nr < 0) {
-                if (!read) 
-                    read = nr;
-                break;
-            }
-            read += nr;
-            if (nr != iov[i].iov_len) break;
+    for (int i = 0; i < iovcnt; i++) {
+        int nr = 0;
+        if (iov[i].iov_len != 0) {
+            syscall_ipc_normal(3, SYSCALL_READ, fd, iov[i].iov_len);
+            nr = seL4_GetMR(0);
         }
-        return read;
-    } else {
-        if (!valid_fd(fd)) {    
-            return -EBADF;
+        if (nr < 0) {
+            if (!read) 
+                read = nr;
+            break;
         }
-
-        /* files can only be opened for reading so no need to check any permissions.
-        * just get straight into it
-        */
-        muslcsys_fd_t *muslc_fd = get_fd_struct(fd);
-        if (muslc_fd->filetype != FILE_TYPE_CPIO) {
-            assert(!"not implemented");
-            return -EINVAL;
-        }
-        cpio_file_data_t *cpio_fd = muslc_fd->data;
-        for (int i = 0; i < iovcnt && cpio_fd->current < cpio_fd->size; i++) {
-            long max = cpio_fd->size - cpio_fd->current;
-            long len = max < iov[i].iov_len ? max : iov[i].iov_len;
-            memcpy(iov[i].iov_base, cpio_fd->start + cpio_fd->current, len);
-            cpio_fd->current += len;
-            read += len;
-        }
+        char *d = iov[i].iov_base;
+        char *read_data = (char *)seL4_GetMR(1);
+        memcpy(d, read_data, nr);
+        read += nr;
+        if (nr != iov[i].iov_len) break;
     }
+
     return read;
 }
 
@@ -453,62 +385,12 @@ static int safe_addition(int a, int b)
            !(a < 0 && b < INT_MAX - a);
 }
 
-long sys_lseek(va_list ap)
-{
+long sys_lseek(va_list ap) {
     int fd = va_arg(ap, int);
-    off_t offset = va_arg(ap, off_t);
+    int offset = va_arg(ap, off_t);
     int whence = va_arg(ap, int);
-
-    if (!valid_fd(fd)) {
-        return -EBADF;
-    }
-
-    muslcsys_fd_t *muslc_fd = get_fd_struct(fd);
-    if (muslc_fd == NULL) {
-        return -EBADF;
-    }
-
-    if (muslc_fd->filetype != FILE_TYPE_CPIO) {
-        assert(!"Not implemented\n");
-        return -EBADF;
-    }
-
-    /* if its a valid fd it must be a cpio file, we
-     * don't support anything else */
-    cpio_file_data_t *cpio_fd = muslc_fd->data;
-
-    int new_offset = 0;
-    switch (whence) {
-    case SEEK_SET:
-        new_offset = offset;
-        break;
-    case SEEK_CUR:
-        if (!safe_addition(cpio_fd->current, offset)) {
-            return -EOVERFLOW;
-        }
-        new_offset = cpio_fd->current + offset;
-        break;
-    case SEEK_END:
-        if (offset > 0) {
-            /* can't seek beyond the end of the cpio file */
-            return -EINVAL;
-        }
-        new_offset = cpio_fd->size + offset;
-        break;
-    default:
-        return -EINVAL;
-    }
-
-    if (new_offset < 0) {
-        return -EINVAL;
-        /* can't seek past the end of the cpio file */
-    } else if (new_offset > cpio_fd->size) {
-        return -EINVAL;
-    }
-
-    cpio_fd->current = new_offset;
-
-    return new_offset;
+    syscall_ipc_normal(4, SYSCALL_LSEEK, fd, offset, whence);
+    return seL4_GetMR(0);
 }
 
 long syscall(long n, ...);
