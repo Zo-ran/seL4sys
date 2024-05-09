@@ -18,15 +18,13 @@ static inline VFrame *find_vframe(VFrame *head, seL4_Word vaddr) {
 }
 
 static inline void page_replace(PCB *pcb, VFrame *vframe) {
-    printf("page replace begin\n");
     // update dirty and accessed information
     for (VFrame *curr = pcb->proc.vframes; curr != NULL; curr = curr->next)
         if (curr->inRAM) {
             sel4utils_res_t *res = reservation_to_res(curr->reserve);
             seL4_X86_PageDirectory_GetStatusBits_t status = seL4_X86_PageDirectory_GetStatusBits(pcb->proc.pd.cptr, res->start);
-            curr->accessed = status.accessed;
-            curr->dirty = status.dirty;
-            printf("addr: %p dirty: %d accessed: %d\n", res->start, curr->dirty, curr->accessed);
+            curr->accessed = status.accessed * 2;
+            curr->dirty = status.dirty * 2;
         }
 
     VFrame *replaced_page = NULL;
@@ -34,32 +32,60 @@ static inline void page_replace(PCB *pcb, VFrame *vframe) {
     while (replaced_page == NULL) {
         if (pcb->proc.replacer->inRAM) {
             VFrame *replacer = pcb->proc.replacer;
-            // printf("debug: %d %d\n", replacer->accessed, replacer->dirty);
-            if (!replacer->accessed && !replacer->dirty) {
+            if (replacer->accessed < 2 && replacer->dirty < 2) {
                 replaced_page = pcb->proc.replacer;
                 break;
-            } else if (replacer->dirty) {
-                replacer->dirty = 0;
+            } else if (replacer->dirty == 2) {
+                replacer->dirty = 1;
             } else {
-                replacer->accessed = 0;
+                replacer->accessed = 1;
             }
         }
         pcb->proc.replacer = pcb->proc.replacer->next != NULL ? pcb->proc.replacer->next : pcb->proc.vframes;
     }
-    sel4utils_res_t *res = reservation_to_res(replaced_page->reserve);
-    seL4_CPtr frame = vspace_get_cap(&pcb->proc.vspace, (void *)res->start);
-    void *mapping = sel4utils_dup_and_map(&vka, &vspace, frame, PAGE_BITS_4K);
-    // TODO: 将要替换下去的页写入文件
+    // no linked pagefile, get one
+    seL4_Word save = replaced_page->dirty;
     if (replaced_page->pagefile == NULL) {
         replaced_page->pagefile = get_pagefile();
-        printf("pfname: %s\n", replaced_page->pagefile);
+        save = 1;
     }
-    printf("replaced: %p %p\n", res->start, res->end);
+
+    sel4utils_res_t *res = reservation_to_res(replaced_page->reserve);
+    seL4_CPtr frame = vspace_get_cap(&pcb->proc.vspace, (void *)res->start);
+
+    // if modified or not saved ever, save to page file 
+    if (save) {
+        void *mapping = sel4utils_dup_and_map(&vka, &vspace, frame, PAGE_BITS_4K);
+        write_page_to_file(replaced_page->pagefile, mapping);
+        sel4utils_unmap_dup(&vka, &vspace, mapping, PAGE_BITS_4K);
+    }
+
+    // duplicate the frame, then unmap saved page
+    seL4_CPtr tmp_frame;
+    vka_cspace_alloc(&vka, &tmp_frame);
+    seL4_CNode_Copy(
+        seL4_CapInitThreadCNode, tmp_frame, seL4_WordBits, 
+        seL4_CapInitThreadCNode, frame, seL4_WordBits,
+        seL4_AllRights
+    );
+    vspace_unmap_pages(&pcb->proc.vspace, (void *)res->start, 1, PAGE_BITS_4K, &vka);
+    replaced_page->inRAM = 0;
+
+    // read pagefile to target page
+    if (vframe->pagefile != NULL) {
+        void *mapping = sel4utils_dup_and_map(&vka, &vspace, tmp_frame, PAGE_BITS_4K);
+        read_file_to_page(vframe->pagefile, mapping);
+        sel4utils_unmap_dup(&vka, &vspace, mapping, PAGE_BITS_4K);
+    }
+
+    // map target page
+    res = reservation_to_res(vframe->reserve);
+    vspace_map_pages_at_vaddr(&pcb->proc.vspace, &tmp_frame, NULL, (void *)res->start, 1, PAGE_BITS_4K, vframe->reserve);
+    vframe->inRAM = 1;
 }
 
 static inline void alloc_frame(PCB *pcb, VFrame *vframe) {
     if (pcb->proc.pframes_used >= MAX_PFRAME_NUM) {
-        // need to replace a page
         page_replace(pcb, vframe);
     } else {
         pcb->proc.pframes_used += 1;
@@ -67,6 +93,20 @@ static inline void alloc_frame(PCB *pcb, VFrame *vframe) {
         vspace_new_pages_at_vaddr(&pcb->proc.vspace, (void *)res->start, 1, PAGE_BITS_4K, vframe->reserve);
         vframe->inRAM = 1;
     }
+}
+
+void expand_stack(PCB *pcb, seL4_Word fault_vaddr) {
+    seL4_Word vaddr = PAGE_ALIGN_4K(fault_vaddr);
+    reservation_t reserve = vspace_reserve_range_at(&pcb->proc.vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
+    VFrame *vframe = (VFrame *)malloc(sizeof(VFrame));
+    vframe->reserve = reserve;
+    vframe->dirty = 0;
+    vframe->accessed = 0;
+    vframe->pagefile = NULL;
+    vframe->inRAM = 0;
+    vframe->next = pcb->proc.vframes;
+    pcb->proc.vframes = vframe;
+    alloc_frame(pcb, vframe);
 }
 
 void handle_vmfault(seL4_MessageInfo_t fault_msg, bool *resume, seL4_Word sender_badge) {
@@ -77,17 +117,18 @@ void handle_vmfault(seL4_MessageInfo_t fault_msg, bool *resume, seL4_Word sender
         seL4_Word fault_vaddr = seL4_Fault_VMFault_get_Addr(fault);
         seL4_Word currip = seL4_Fault_VMFault_get_IP(fault);
         VFrame *vframe = find_vframe(sender_pcb->proc.vframes, fault_vaddr);
-
-        if (fault_vaddr >= sender_pcb->heap_top && fault_vaddr < STACK_TOP_VADDR) {
+        if (fault_vaddr >= sender_pcb->heap_top && fault_vaddr >= HEAP_BASE_VADDR && fault_vaddr < STACK_TOP_VADDR) {
             // need to expand stack
-
+            expand_stack(sender_pcb, fault_vaddr);
+            *resume = true;
         } else {
             if (vframe == NULL) {
-                ZF_LOGE("VM fault at vaddr: %p (IP %p).", fault_vaddr, currip);
+                if (currip != 0)
+                    ZF_LOGE("VM fault at vaddr: %p (IP %p).", fault_vaddr, currip);
                 *resume = false;
             } else {
                 alloc_frame(sender_pcb, vframe);
-                *resume = false;
+                *resume = true;
             }
         }
     }

@@ -6,11 +6,12 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <utils/page.h>
+
 #define PAGEFILE_PATH "/swap"
 
 Pagefile *pagefiles;
 int pagefile_num;
-
 
 void pagefile_init(SuperBlock *sBlock, GroupDesc *gDesc) {
     pagefiles = NULL;
@@ -22,7 +23,7 @@ void pagefile_init(SuperBlock *sBlock, GroupDesc *gDesc) {
     DirEntry dir;
     for (int i = 0; getDirEntry(sBlock, &inode, i, &dir) == 0; ++i) {
         Pagefile *pf = (Pagefile *)malloc(sizeof(Pagefile));
-        strcpy(pf->name, dir.name);
+        sprintf(pf->name, "%s/%s", PAGEFILE_PATH, dir.name);
         pf->inuse = 0;
         pf->next = pagefiles;
 
@@ -33,7 +34,6 @@ void pagefile_init(SuperBlock *sBlock, GroupDesc *gDesc) {
 
 char *get_pagefile() {
     Pagefile *pf = pagefiles;
-    printf("pagefile: %d\n", pagefile_num);
     for (; pf != NULL; pf = pf->next)
         if (!pf->inuse)
             break;
@@ -43,15 +43,32 @@ char *get_pagefile() {
     } else {
         Pagefile *pf = (Pagefile *)malloc(sizeof(Pagefile));
         pf->inuse = 1;
-        sprintf(pf->name, "page%d", pagefile_num);
+        sprintf(pf->name, "%s/page%d", PAGEFILE_PATH, pagefile_num);
         pf->next = pagefiles;
 
         pagefiles = pf;
         pagefile_num += 1;
 
-        char buf[NAME_LENGTH] = "\0";
-        sprintf(buf, "%s/%s", PAGEFILE_PATH, pf->name);
-        syscall_open(buf, O_CREAT);
+        syscall_open(pf->name, O_CREAT);
         return pf->name;
     }
+}
+
+void write_page_to_file(const char *filename, void *vaddr) {
+    FCB vfcb;
+    vfcb.flags = O_RDWR;
+    vfcb.offset = 0;
+    vfcb.inuse = 1;
+    vfcb.inodeOffset = syscall_open(filename, O_RDWR);
+    syscall_writefile(&vfcb, 3, vaddr, PAGE_SIZE_4K);
+}
+
+void read_file_to_page(const char *filename, void *vaddr) {
+    FCB vfcb;
+    vfcb.flags = O_RDWR;
+    vfcb.offset = 0;
+    vfcb.inuse = 1;
+    vfcb.inodeOffset = syscall_open(filename, O_RDWR);
+    int ret = syscall_readfile(&vfcb, 3, vaddr, PAGE_SIZE_4K);
+    assert(ret == PAGE_SIZE_4K);
 }

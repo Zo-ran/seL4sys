@@ -37,7 +37,7 @@ struct VFrame {
     VFrame *next;
 };
 
-#define MAX_PFRAME_NUM 1
+#define MAX_PFRAME_NUM 256
 
 typedef struct {
     vka_object_t pd;

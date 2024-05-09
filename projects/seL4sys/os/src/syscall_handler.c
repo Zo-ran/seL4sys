@@ -70,7 +70,6 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
                 while (sender_pcb->heap_top < new_brk) {
                     void *vaddr = (void *) sender_pcb->heap_top;
                     reservation_t reserve = vspace_reserve_range_at(&sender_pcb->proc.vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
-                    // vspace_new_pages_at_vaddr(&sender_pcb->proc.vspace, vaddr, 1, PAGE_BITS_4K, reserve);
                     sender_pcb->heap_top += PAGE_SIZE_4K;
                     VFrame *vframe = (VFrame *)malloc(sizeof(VFrame));
                     vframe->reserve = reserve;

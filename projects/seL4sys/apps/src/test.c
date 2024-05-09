@@ -23,14 +23,25 @@ void fs_test() {
     printf("finish\n");
 }
 
-void vm_test() {
-    char *str = malloc(20);
-    str[0] = '1';
-    printf("finish\n");
+// void vm_test() {
+//     char *str1 = malloc(100);
+//     strcpy(str1, "hello1\0");
+//     malloc(1024);malloc(1024);malloc(1024);malloc(1024);
+//     char *str2 = malloc(10);
+//     strcpy(str2, "hello2\0");
+
+//     printf("finishasdsad: %s%s\n", str1, str2);
+//     printf("finish\n");
+// }
+
+void stack_test() {
+    char *str = (void *)(0xb0000000);
+    strcpy(str, "hello1\0");
+    printf("%s\n", str);
 }
 
 int main() {
     // remove("/fuck.txt");
     // open("/2.txt", O_CREAT);
-    vm_test();
+    stack_test();
 }

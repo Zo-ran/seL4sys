@@ -219,25 +219,8 @@ void start_system_thread(const char *name, sel4utils_thread_entry_fn entry_point
 }
 
 void test() {
-    void *vaddr = (void *)0x1000;
-    void *vaddr0 = (void *)0x10000;
-    reservation_t reserve = vspace_reserve_range_at(&vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
-    int error = vspace_new_pages_at_vaddr(&vspace, vaddr, 1, PAGE_BITS_4K, reserve);
-    seL4_CPtr ptr = vspace_get_cap(&vspace, vaddr);
-    seL4_CPtr new_ptr;
-    error = vka_cspace_alloc(&vka, &new_ptr);
-    error = seL4_CNode_Copy(
-        seL4_CapInitThreadCNode, new_ptr, seL4_WordBits, 
-        seL4_CapInitThreadCNode, ptr, seL4_WordBits,
-        seL4_AllRights
-    );
-    
-    vspace_unmap_pages(&vspace, vaddr, 1, PAGE_BITS_4K, &vka);
-    reservation_t reserve0 = vspace_reserve_range_at(&vspace, vaddr0, PAGE_SIZE_4K, seL4_AllRights, 1);
-    error = vspace_map_pages_at_vaddr(&vspace, &new_ptr, NULL, vaddr0, 1, PAGE_BITS_4K, reserve0);
-    char *test_buf = (char *)vaddr0;
-    memset(test_buf, 0, 1000);
-    assert(error == 0);
+    seL4_Word vaddr = 0x200d;
+    printf("test: %p\n", PAGE_ALIGN_4K(vaddr));
     printf("oooook\n");
     while (1);
 }
@@ -262,8 +245,8 @@ int main(int argc, char *argv[]) {
     syscallserver_ipc_init();
 
     // load user apps
+    // test();
     load_test_app("test", 1);
-    // test();    
     // start keyboard irq handle thread
     // start_kbd_thread();
     // handle_vmfault(fault_ep.cptr);
