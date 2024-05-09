@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include "ext.h"
 #include "fs.h"
+#include "pagefile.h"
 
 SuperBlock sBlock;
 GroupDesc gDesc[MAX_GROUP_NUM];
@@ -32,8 +33,9 @@ void ls(const char *filename) {
     assert(ret == 0);
     DirEntry dir;
     for (int i = 0; getDirEntry(&sBlock, &inode, i, &dir) == 0; ++i) {
-        printf("%s\n", dir.name);
+        printf("%s ", dir.name);
     }
+    printf("\n");
 }
 
 static inline int find_last_of(const char *str, char token, int end) {
@@ -187,5 +189,8 @@ int syscall_lseek(FCB *fcb, int fd, int offset, int whence) {
 
 void filesystem_init() {
 	readGroupHeader(&sBlock, gDesc);
+    pagefile_init(&sBlock, gDesc);
+    printf("available: %d\n", sBlock.availInodeNum);
     ls("/");
+    ls("/swap");
 }

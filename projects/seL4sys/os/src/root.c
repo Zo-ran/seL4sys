@@ -50,10 +50,6 @@ seL4_CPtr syscall_ep;
 seL4_CPtr root_cspace_cap;
 seL4_CPtr root_vspace_cap;
 
-// TODO: remove it
-// seL4 kernel reserved virtual space e0100000 ~ e02e9000
-// text segment starts from 0x8048000
-
 /* static memory for the allocator to bootstrap with */
 #define ALLOCATOR_STATIC_POOL_SIZE (BIT(seL4_PageBits) * 10000)
 static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
@@ -63,12 +59,6 @@ static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
 
 /* static memory for virtual memory bootstrapping */
 static sel4utils_alloc_data_t data;
-
-/* stack for the kbd irq handle thread */
-#define KBD_STACK_SIZE 512
-#define KBD_IPCBUF_VADDR 0x7000000
-uint64_t kbd_stack[KBD_STACK_SIZE];
-char tls_region[16384] = {};
 
 /* IRQ I/O ports */
 #define PORT_PIC_MASTER 0x20
@@ -181,9 +171,8 @@ void load_test_app(const char *app_name, uint8_t app_prio) {
     
     // set up process syscall shared memory 
     reservation_t reserve = vspace_reserve_range_at(&new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
-    int error = vspace_share_mem_at_vaddr(&vspace, &new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, (void *)SYS_SHARED_AREA_VADDR, reserve);
-    assert(error == 0);
-
+    vspace_share_mem_at_vaddr(&vspace, &new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, (void *)SYS_SHARED_AREA_VADDR, reserve);
+    new_process->replacer = new_process->vframes;
     // start new process
     FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, new_process, &vka, &vspace, 0, NULL, 1);
 }
@@ -279,7 +268,7 @@ int main(int argc, char *argv[]) {
     // start_kbd_thread();
     // handle_vmfault(fault_ep.cptr);
     start_system_thread("kdb irq handler", kbd_irq_handle_mainloop, 0, 0, 0);
-    start_system_thread("vmfault handler", handle_vmfault, (void *)fault_ep.cptr, 0, 0);
+    start_system_thread("vmfault handler", handle_vmfault_loop, (void *)fault_ep.cptr, 0, 0);
 
     seL4_DebugDumpScheduler();
 

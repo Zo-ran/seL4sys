@@ -389,13 +389,13 @@ int getAvailBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int *blockOffse
 
 	/*XXX write superBlock back
 	 *    write groupDesc back */
-	for (i = 0; i < groupNum; i ++) {
-		//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
-		//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
-		//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
-		write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
-		write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
-	}
+	// for (i = 0; i < groupNum; i ++) {
+	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
+	// 	//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
+	// 	//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
+	write_disk((void*)superBlock, sizeof(SuperBlock), 1, 0);
+	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, sizeof(SuperBlock));
+	// }
 	/*XXX write blockBitmap back */
 	//fseek(file, blockBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&blockBitmap, sizeof(BlockBitmap), 1, file); // write whole blockBitmap
@@ -431,13 +431,15 @@ int setAllocBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int blockOffset
 	
 	/*XXX write superBlock back
 	 *    write groupDesc back */
-	for (i = 0; i < groupNum; i ++) {
-		//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
-		//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
-		//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
-		write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
-		write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
-	}
+	// for (i = 0; i < groupNum; i ++) {
+	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
+	// 	//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
+	// 	//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
+	write_disk((void*)superBlock, sizeof(SuperBlock), 1, 0);
+	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, sizeof(SuperBlock));
+	// 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
+	// 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
+	// }
 	/*XXX write blockBitmap back */
 	//fseek(file, blockBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&blockBitmap, sizeof(BlockBitmap), 1, file); // write whole blockBitmap
@@ -968,13 +970,15 @@ int getAvailInode (SuperBlock *superBlock, GroupDesc *groupDesc, int *inodeOffse
 
 	/* write superBlock back
 	 * write groupDesc back */
-	for (i = 0; i < groupNum; i ++) {
-		//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
-		//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
-		//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
-		write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
-		write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
-	}
+	// for (i = 0; i < groupNum; i ++) {
+	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
+	// 	//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
+	// 	//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
+	write_disk((void*)superBlock, sizeof(SuperBlock), 1, 0);
+	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, sizeof(SuperBlock));
+	// 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
+	// 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
+	// }
 
 	/* write inodeBitmap back */
 	//fseek(file, inodeBitmapOffset * SECTOR_SIZE, SEEK_SET);
@@ -1011,13 +1015,15 @@ int setAllocInode (SuperBlock *superBlock, GroupDesc *groupDesc, int inodeOffset
 
 	/*XXX write superBlock back
 	 *    write groupDesc back */
-	for (i = 0; i < groupNum; i ++) {
-		//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
-		//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
-		//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
-		write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
-		write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
-	}
+	// for (i = 0; i < groupNum; i ++) {
+	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
+	// 	//fwrite((void*)superBlock, sizeof(SuperBlock), 1, file);
+	// 	//fwrite((void*)groupDesc, sizeof(GroupDesc), groupNum, file);
+	write_disk((void*)superBlock, sizeof(SuperBlock), 1, 0);
+	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, sizeof(SuperBlock));
+	// 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
+	// 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
+	// }
 	/*XXX write inodeBitmap back */
 	//fseek(file, inodeBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&inodeBitmap, sizeof(InodeBitmap), 1, file); // write whole blockBitmap

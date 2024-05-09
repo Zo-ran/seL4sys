@@ -26,14 +26,18 @@ struct object_node {
     object_node_t *next;
 };
 
-typedef struct VFrame {
+typedef struct VFrame VFrame;
+
+struct VFrame {
     reservation_t reserve;
     seL4_Word accessed;
     seL4_Word dirty;
-    const char *swap_filename;
-} VFrame;
+    seL4_Word inRAM;
+    const char *pagefile;
+    VFrame *next;
+};
 
-#define MAX_VFRAME_NUM 1024
+#define MAX_PFRAME_NUM 1
 
 typedef struct {
     vka_object_t pd;
@@ -63,8 +67,9 @@ typedef struct {
     bool own_vspace;
     bool own_cspace;
     bool own_ep;
-    int v_pos;
-    VFrame vframes[MAX_VFRAME_NUM];
+    int pframes_used;
+    VFrame *vframes;
+    VFrame *replacer;
 } sel4utils_process_t;
 
 /* sel4utils processes start with some caps in their cspace.

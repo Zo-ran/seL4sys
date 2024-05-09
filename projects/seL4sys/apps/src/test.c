@@ -30,6 +30,7 @@ void vm_test() {
 }
 
 int main() {
-    printf("finish\n");
+    // remove("/fuck.txt");
+    // open("/2.txt", O_CREAT);
     vm_test();
 }
