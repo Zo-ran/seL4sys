@@ -80,9 +80,9 @@ typedef union SuperBlock SuperBlock;
 union GroupDesc {
 	uint8_t byte[GROUP_DESC_SIZE];
 	struct {
-		int32_t inodeBitmap; //XXX sector as unit
-		int32_t blockBitmap; //XXX sector as unit
-		int32_t inodeTable;  //XXX sector as unit
+		int32_t inodeBitmap; // sector as unit
+		int32_t blockBitmap; // sector as unit
+		int32_t inodeTable;  // sector as unit
 		int32_t availInodeNum;
 		int32_t availBlockNum;
 	};
@@ -105,10 +105,10 @@ typedef struct BlockBitmap BlockBitmap;
 union Inode {
 	uint8_t byte[INODE_SIZE];
 	struct {
-		int16_t type;  //TODO further implement privilege control, i.e., drwxrwxrwx, uid, gid, others
+		int16_t type;  // further implement privilege control, i.e., drwxrwxrwx, uid, gid, others
 		int16_t linkCount;
 		int32_t blockCount;
-		int32_t size;  //XXX size of this file, byte as unit
+		int32_t size;  // size of this file, byte as unit
 		int32_t pointer[POINTER_NUM];
 		int32_t singlyPointer;
 		int32_t doublyPointer;
@@ -121,9 +121,9 @@ typedef union Inode Inode;
 union DirEntry {
 	uint8_t byte[DIRENTRY_SIZE];
 	struct {
-		int32_t inode; //XXX byte as unit? TODO inode index as unit
-		//int32_t size;  //XXX size of this file, byte as unit
-		//int8_t type; //XXX may not be necessary
+		int32_t inode; // byte as unit? TODO inode index as unit
+		//int32_t size;  // size of this file, byte as unit
+		//int8_t type; // may not be necessary
 		char name[NAME_LENGTH];
 	};
 };

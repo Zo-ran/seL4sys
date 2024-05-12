@@ -1,5 +1,4 @@
 #include "timer.h"
-#include "utils.h"
 #include <platsupport/timer.h>
 #include <sel4platsupport/io.h>
 

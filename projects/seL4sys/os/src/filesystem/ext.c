@@ -365,7 +365,7 @@ int getAvailBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int *blockOffse
 	
 	if (superBlock->availBlockNum == 0)
 		return -1;
-	superBlock->availBlockNum --; //XXX superBlock is updated
+	superBlock->availBlockNum --; // superBlock is updated
 
 	for (i = 0; i < groupNum; i ++) {
 		if ((groupDesc + i)->availBlockNum >= 1) {
@@ -385,9 +385,9 @@ int getAvailBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int *blockOffse
 			break;
 	blockBitmap.byte[j] = blockBitmap.byte[j] | (1 << (7-k));
 	*blockOffset += sizeof(Inode) * 8 * superBlock->blockSize / SECTOR_SIZE + (j * 8 + k) * superBlock->blockSize / SECTOR_SIZE; // sector as unit
-	(groupDesc + i)->availBlockNum --; //XXX groupDesc is updated
+	(groupDesc + i)->availBlockNum --; // groupDesc is updated
 
-	/*XXX write superBlock back
+	/* write superBlock back
 	 *    write groupDesc back */
 	// for (i = 0; i < groupNum; i ++) {
 	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
@@ -396,7 +396,7 @@ int getAvailBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int *blockOffse
 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, 0);
 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, sizeof(SuperBlock));
 	// }
-	/*XXX write blockBitmap back */
+	/* write blockBitmap back */
 	//fseek(file, blockBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&blockBitmap, sizeof(BlockBitmap), 1, file); // write whole blockBitmap
 	write_disk((void*)&blockBitmap, sizeof(BlockBitmap), 1, blockBitmapOffset * SECTOR_SIZE);
@@ -425,11 +425,11 @@ int setAllocBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int blockOffset
 	if ((blockBitmap.byte[j] >> (7-k)) % 2 == 0)
 		return -1;
 
-	superBlock->availBlockNum ++; //XXX superBlock is updated
-	(groupDesc + i)->availBlockNum ++; //XXX groupDesc is updated
+	superBlock->availBlockNum ++; // superBlock is updated
+	(groupDesc + i)->availBlockNum ++; // groupDesc is updated
 	blockBitmap.byte[j] = blockBitmap.byte[j] ^ (1 << (7-k));
 	
-	/*XXX write superBlock back
+	/* write superBlock back
 	 *    write groupDesc back */
 	// for (i = 0; i < groupNum; i ++) {
 	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
@@ -440,7 +440,7 @@ int setAllocBlock (SuperBlock *superBlock, GroupDesc *groupDesc, int blockOffset
 	// 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
 	// 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
 	// }
-	/*XXX write blockBitmap back */
+	/* write blockBitmap back */
 	//fseek(file, blockBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&blockBitmap, sizeof(BlockBitmap), 1, file); // write whole blockBitmap
 	write_disk((void*)&blockBitmap, sizeof(BlockBitmap), 1, blockBitmapOffset * SECTOR_SIZE);
@@ -617,7 +617,7 @@ int allocLastBlock (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *inode, 
 	}
 	else
 		return -1;
-	//XXX write back inode
+	// write back inode
 	inode->blockCount ++;
 	//fseek(file, inodeOffset, SEEK_SET);
 	//fwrite((void*)inode, sizeof(Inode), 1, file);
@@ -634,16 +634,16 @@ int allocBlock (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *inode, int 
 	int ret = 0;
 	int blockOffset = 0;
 	
-	/*XXX verify whether allocBlock would fail or not */
+	/* verify whether allocBlock would fail or not */
 	ret = calNeededPointerBlocks(superBlock, inode->blockCount);
 	if (superBlock->availBlockNum < ret + 1) // ret + 1 number of blocks should be allocated in total
 		return -1;
 	
-	/*XXX get the block to allocate */
+	/* get the block to allocate */
 	//getAvailBlock(file, superBlock, groupDesc, &blockOffset);
 	getAvailBlock(superBlock, groupDesc, &blockOffset);
 
-	/*XXX allocte pointer block of inode */
+	/* allocte pointer block of inode */
 	//allocLastBlock(file, superBlock, groupDesc, inode, inodeOffset, blockOffset);
 	allocLastBlock(superBlock, groupDesc, inode, inodeOffset, blockOffset);
 	
@@ -667,7 +667,7 @@ int freeLastBlock (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *inode, i
 	uint32_t doublyPointerBuffer[divider0];
 	uint32_t triplyPointerBuffer[divider0];
 
-	//XXX setting inode
+	// setting inode
 	inode->blockCount --;
 
 	if (inode->blockCount < bound0) {
@@ -792,7 +792,7 @@ int freeLastBlock (SuperBlock *superBlock, GroupDesc *groupDesc, Inode *inode, i
 	}
 	else
 		return -1;
-	//XXX write back inode
+	// write back inode
 	//fseek(file, inodeOffset, SEEK_SET);
 	//fwrite((void*)inode, sizeof(Inode), 1, file);
 	write_disk((void*)inode, sizeof(Inode), 1, inodeOffset);
@@ -853,11 +853,11 @@ int getDirEntry (SuperBlock *superBlock, Inode *inode, int dirIndex, DirEntry *d
 /*
 * Supported destFilePath pattern
 * destFilePath = "" empty string, echo error
-* destFilePath = "/xxx//xxx", echo error
-* destFilePath = "xxx/...", echo error
+* destFilePath = "///", echo error
+* destFilePath = "/...", echo error
 * destFilePath = "/" for root directory
-* destFilePath = "/xxx/.../xxxx" for both directory and regular file
-* destFilePath = "/xxx/.../xxxx/" for directory file only
+* destFilePath = "//.../xxxx" for both directory and regular file
+* destFilePath = "//.../xxxx/" for directory file only
 */
 //int readInode (FILE *file, SuperBlock *superBlock, GroupDesc *groupDesc,
 int readInode (SuperBlock *superBlock, GroupDesc *groupDesc,
@@ -945,7 +945,7 @@ int getAvailInode (SuperBlock *superBlock, GroupDesc *groupDesc, int *inodeOffse
 	/* check inode & block available or not */
 	if (superBlock->availInodeNum == 0)
 		return -1;
-	superBlock->availInodeNum --; //XXX superBlock is updated
+	superBlock->availInodeNum --; // superBlock is updated
 
 	/* for a directory file, allocate a new inode */
 	for (i = 0; i < groupNum; i ++) {
@@ -966,7 +966,7 @@ int getAvailInode (SuperBlock *superBlock, GroupDesc *groupDesc, int *inodeOffse
 			break;
 	inodeBitmap.byte[j] = inodeBitmap.byte[j] | (1 << (7-k));
 	*inodeOffset = inodeTableOffset * SECTOR_SIZE + (j * 8 + k) * sizeof(Inode); // byte as unit
-	(groupDesc + i)->availInodeNum --; //XXX groupDesc is updated
+	(groupDesc + i)->availInodeNum --; // groupDesc is updated
 
 	/* write superBlock back
 	 * write groupDesc back */
@@ -1013,7 +1013,7 @@ int setAllocInode (SuperBlock *superBlock, GroupDesc *groupDesc, int inodeOffset
 	(groupDesc + i)->availInodeNum ++;
 	inodeBitmap.byte[j] = inodeBitmap.byte[j] ^ (1 << (7-k));
 
-	/*XXX write superBlock back
+	/* write superBlock back
 	 *    write groupDesc back */
 	// for (i = 0; i < groupNum; i ++) {
 	// 	//fseek(file, i * groupSize * SECTOR_SIZE, SEEK_SET);
@@ -1024,7 +1024,7 @@ int setAllocInode (SuperBlock *superBlock, GroupDesc *groupDesc, int inodeOffset
 	// 	write_disk((void*)superBlock, sizeof(SuperBlock), 1, i * groupSize * SECTOR_SIZE);
 	// 	write_disk((void*)groupDesc, sizeof(GroupDesc), groupNum, i * groupSize * SECTOR_SIZE + sizeof(SuperBlock) * 1);
 	// }
-	/*XXX write inodeBitmap back */
+	/* write inodeBitmap back */
 	//fseek(file, inodeBitmapOffset * SECTOR_SIZE, SEEK_SET);
 	//fwrite((void*)&inodeBitmap, sizeof(InodeBitmap), 1, file); // write whole blockBitmap
 	write_disk((void*)&inodeBitmap, sizeof(InodeBitmap), 1, inodeBitmapOffset * SECTOR_SIZE);
@@ -1050,7 +1050,7 @@ int allocInode (SuperBlock *superBlock, GroupDesc *groupDesc,
 	if (destFilename == NULL || destFilename[0] == 0)
 		return -1;
 
-	/*XXX verify whether available inode exist*/
+	/* verify whether available inode exist*/
 	if (superBlock->availInodeNum == 0)
 		return -1;
 	/* setting dirEntry */
@@ -1069,12 +1069,12 @@ int allocInode (SuperBlock *superBlock, GroupDesc *groupDesc,
 		if (j < superBlock->blockSize / sizeof(DirEntry))
 			break;
 	}
-	if (i == fatherInode->blockCount) { //TODO allocate a new data block for fatherInode
+	if (i == fatherInode->blockCount) { // allocate a new data block for fatherInode
 		//ret = allocBlock(file, superBlock, groupDesc, fatherInode, fatherInodeOffset);
 		ret = allocBlock(superBlock, groupDesc, fatherInode, fatherInodeOffset);
 		if (ret == -1)
 			return -1;
-		fatherInode->size = fatherInode->blockCount * superBlock->blockSize; //XXX need to write back fatherInode
+		fatherInode->size = fatherInode->blockCount * superBlock->blockSize; // need to write back fatherInode
         memset(buffer, superBlock->blockSize, 0);
 		dirEntry = (DirEntry*)buffer;
 		j = 0;
@@ -1083,15 +1083,15 @@ int allocInode (SuperBlock *superBlock, GroupDesc *groupDesc,
 	/* get available inode */
 	//ret = getAvailInode(file, superBlock, groupDesc, destInodeOffset);
 	ret = getAvailInode(superBlock, groupDesc, destInodeOffset);
-	if (ret == -1) //XXX as we have check it in advance, it won't happen
+	if (ret == -1) // as we have check it in advance, it won't happen
 		return -1;
 	/* setting dirEntry */
 	strncpy(dirEntry[j].name, destFilename, NAME_LENGTH); // setting name of dirEntry
-	dirEntry[j].inode = *destInodeOffset; //TODO setting inode of dirEntry
+	dirEntry[j].inode = *destInodeOffset; // setting inode of dirEntry
 	/* write back dirEntry */
 	//ret = writeBlock(file, superBlock, fatherInode, i, buffer); // write back i-th block of fatherInode
 	ret = writeBlock(superBlock, fatherInode, i, buffer); // write back i-th block of fatherInode
-	if (ret == -1) //XXX normally, it won't happen
+	if (ret == -1) // normally, it won't happen
 		return -1;
 	/* write back fatherInode */
 	//fseek(file, fatherInodeOffset, SEEK_SET);
@@ -1147,11 +1147,11 @@ int freeInode (SuperBlock *superBlock, GroupDesc *groupDesc,
 	//fseek(file, *destInodeOffset, SEEK_SET);
 	//fread((void*)destInode, sizeof(Inode), 1, file);
 	read_disk((void*)destInode, sizeof(Inode), 1, *destInodeOffset);
-	if (destInode->type != destFiletype) //XXX verify the filetype
+	if (destInode->type != destFiletype) // verify the filetype
 		return -1;
-	if (destFiletype == DIRECTORY_TYPE) { //XXX check if the directory is empty
-		//if (getDirEntry(file, superBlock, destInode, 0, &tmpDirEntry) != -1) //XXX not empty
-		if (getDirEntry(superBlock, destInode, 0, &tmpDirEntry) != -1) //XXX not empty
+	if (destFiletype == DIRECTORY_TYPE) { // check if the directory is empty
+		//if (getDirEntry(file, superBlock, destInode, 0, &tmpDirEntry) != -1) // not empty
+		if (getDirEntry(superBlock, destInode, 0, &tmpDirEntry) != -1) // not empty
 			return -1;
 	}
 	destInode->linkCount --;

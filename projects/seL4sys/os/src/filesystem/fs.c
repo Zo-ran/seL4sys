@@ -26,6 +26,10 @@ GroupDesc gDesc[MAX_GROUP_NUM];
 // #define O_NOFOLLOW  0400000
 // #define O_CLOEXEC  02000000
 
+// TODO: add relative path support
+// TODO: implement active inode table
+// TODO: set file priviledge level
+
 void ls(const char *filename) {
     Inode inode;
 	int inodeOffset = 0;

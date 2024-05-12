@@ -12,6 +12,8 @@
 long sys_set_thread_area(va_list ap);
 long sys_set_tid_address(va_list ap);
 long sys_sched_yield(va_list ap);
+long sys_execve(va_list ap);
+long sys_kill(va_list ap);
 long sys_exit(va_list ap);
 long sys_rt_sigprocmask(va_list ap);
 long sys_gettid(va_list ap);

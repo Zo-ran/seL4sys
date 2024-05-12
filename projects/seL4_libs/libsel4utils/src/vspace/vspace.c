@@ -463,10 +463,10 @@ void sel4utils_unmap_pages(vspace_t *vspace, void *vaddr, size_t num_pages, size
             vka_cspace_make_path(vka, cap, &path);
             vka_cnode_delete(&path);
             vka_cspace_free(vka, cap);
-            // if (sel4utils_get_cookie(vspace, vaddr)) {
-            //     vka_utspace_free(vka, kobject_get_type(KOBJECT_FRAME, size_bits),
-            //                      size_bits, sel4utils_get_cookie(vspace, vaddr));
-            // }
+            if (sel4utils_get_cookie(vspace, vaddr)) {
+                vka_utspace_free(vka, kobject_get_type(KOBJECT_FRAME, size_bits),
+                                 size_bits, sel4utils_get_cookie(vspace, vaddr));
+            }
         }
 
         if (reserve == NULL) {

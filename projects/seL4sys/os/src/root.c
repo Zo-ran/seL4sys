@@ -36,7 +36,7 @@
 #include "filesystem/disk.h"
 #include "filesystem/fs.h"
 #include "vm/vmfault_handler.h"
-#include "timer.h"
+#include "timer/timer.h"
 #include "process.h"
 
 seL4_BootInfo *boot_info;
@@ -65,6 +65,9 @@ static sel4utils_alloc_data_t data;
 #define PORT_PIC_SLAVE  0xA0
 #define IRQ_SLAVE       2
 
+
+// TODO: add lock to shared memory
+// TODO: set different sys server threads
 
 void rootvars_init() {
     boot_info = platsupport_get_bootinfo();
@@ -144,7 +147,7 @@ void handle_syscall_loop() {
     }
 }
 
-void load_test_app(const char *app_name, uint8_t app_prio) {
+void load_shell(const char *app_name, uint8_t app_prio) {
     int cur_pid = alloc_pid();
     PCB *new_pcb = pid_getproc(cur_pid);
     sel4utils_process_t *new_process = &new_pcb->proc;
@@ -153,7 +156,7 @@ void load_test_app(const char *app_name, uint8_t app_prio) {
     config.create_fault_endpoint = false;
     config.fault_endpoint = fault_ep;
     // configure user test process
-    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config, cur_pid);
+    FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config, cur_pid, NULL, 0);
     NAME_THREAD(new_process->thread.tcb.cptr, "user test thread");
 
     // mint the syscall endpoint into the process
@@ -235,7 +238,7 @@ int main(int argc, char *argv[]) {
 
     // init device drivers
     vga_init(&io_ops.io_mapper);
-    // timer_init(&vka, &vspace, &simple);
+    timer_init(&vka, &vspace, &simple);
     kbd_init(&vka, &simple);
     disk_init();
     filesystem_init();
@@ -246,11 +249,10 @@ int main(int argc, char *argv[]) {
 
     // load user apps
     // test();
-    load_test_app("test", 1);
+    load_shell("shell", 1);
+
     // start keyboard irq handle thread
-    // start_kbd_thread();
-    // handle_vmfault(fault_ep.cptr);
-    start_system_thread("kdb irq handler", kbd_irq_handle_mainloop, 0, 0, 0);
+    start_system_thread("kbd irq handler", kbd_irq_handle_mainloop, 0, 0, 0);
     start_system_thread("vmfault handler", handle_vmfault_loop, (void *)fault_ep.cptr, 0, 0);
 
     seL4_DebugDumpScheduler();

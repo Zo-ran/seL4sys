@@ -122,6 +122,8 @@ static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
      * whatever __NR_writev is set to. */
     [__NR_write] = sys_write,
     [__NR_sched_yield] = sys_sched_yield,
+    [__NR_execve] = sys_execve, 
+    [__NR_kill] = sys_kill,
     [__NR_exit] = sys_exit,
     [__NR_rt_sigprocmask] = sys_rt_sigprocmask,
     [__NR_gettid] = sys_gettid,
@@ -129,7 +131,7 @@ static muslcsys_syscall_t syscall_table[MUSLC_NUM_SYSCALLS] = {
     [__NR_tgkill] = sys_tgkill,
     [__NR_tkill] = sys_tkill,
     [__NR_exit_group] = sys_exit_group,
-
+    
     [__NR_open] = sys_open,
     [__NR_openat] = sys_openat,
     [__NR_close] = sys_close,

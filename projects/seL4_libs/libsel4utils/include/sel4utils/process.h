@@ -201,7 +201,7 @@ int sel4utils_configure_process(sel4utils_process_t *process, vka_t *vka, vspace
  * @return 0 on success, -1 on error.
  */
 int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *target_vka,
-                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid);
+                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid, const char *elf_file, int elf_size);
 
 /**
  * Copy a cap into a process' cspace.

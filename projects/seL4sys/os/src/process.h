@@ -6,6 +6,7 @@
 #define MAX_FILE_NUM 32
 
 struct PCB {
+    int inuse;
     sel4utils_process_t proc;
     seL4_Word heap_top;
     FCB file_table[MAX_FILE_NUM];
@@ -15,3 +16,5 @@ typedef struct PCB PCB;
 
 PCB *pid_getproc(seL4_Word pid);
 int alloc_pid();
+int syscall_execve(const char *path, int argc, char **argv);
+int syscall_kill(int pid, int sig);

@@ -19,7 +19,8 @@ util_libs_import_libraries()
 sel4_projects_libs_import_libraries()
 sel4_libs_import_libraries()
 
-add_subdirectory(apps)
+add_subdirectory(apps/shell)
+add_subdirectory(apps/benchmark)
 add_subdirectory(os)
 
 include(simulation)

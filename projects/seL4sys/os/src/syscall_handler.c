@@ -12,7 +12,7 @@
 #include "console/keyboard.h"
 #include "console/vga.h"
 #include "filesystem/fs.h"
-#include "timer.h"
+#include "timer/timer.h"
 #include "process.h"
 
 void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageInfo_t *reply_tag, seL4_Word badge) {
@@ -122,6 +122,26 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
         case SYSCALL_LSEEK: {
             int fileno = seL4_GetMR(1), offset = seL4_GetMR(2), whence = seL4_GetMR(3);
             seL4_SetMR(0, syscall_lseek(sender_pcb->file_table + fileno, fileno, offset, whence));
+            break;
+        }
+        case SYSCALL_EXECVE: {
+            const char *path = (char *)seL4_GetMR(1);
+            int argc = seL4_GetMR(2);
+            char **argv = (char **)seL4_GetMR(3);
+            seL4_SetMR(0, syscall_execve(path, argc, argv));
+            break;
+        }
+        case SYSCALL_KILL: {
+            int pid = seL4_GetMR(1), sig = seL4_GetMR(2);
+            seL4_SetMR(0, syscall_kill(pid, sig));
+            break;
+        }
+        case SYSCALL_GETPID: {
+            seL4_SetMR(0, badge);
+            break;
+        }
+        case SYSCALL_EXIT: {
+            syscall_kill(badge, 9);
             break;
         }
         default:

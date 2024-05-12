@@ -72,3 +72,11 @@ void read_file_to_page(const char *filename, void *vaddr) {
     int ret = syscall_readfile(&vfcb, 3, vaddr, PAGE_SIZE_4K);
     assert(ret == PAGE_SIZE_4K);
 }
+
+void free_pagefile(const char *filename) {
+    for (Pagefile *pf = pagefiles; pf != NULL; pf = pf->next)
+        if (strcmp(pf->name, filename) == 0) {
+            pf->inuse = 0;
+            return;
+        }
+}

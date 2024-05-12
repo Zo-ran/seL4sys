@@ -11,7 +11,7 @@ add_executable(
     os 
     src/root.c
     src/process.c
-    src/timer.c
+    src/timer/timer.c
     src/syscall_handler.c
     src/console/vga.c
     src/console/keyboard.c

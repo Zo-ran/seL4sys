@@ -392,7 +392,7 @@ int sel4utils_configure_process(sel4utils_process_t *process, vka_t *vka,
                                 vspace_t *vspace, const char *image_name)
 {
     sel4utils_process_config_t config = process_config_default(image_name, seL4_CapInitThreadASIDPool);
-    return sel4utils_configure_process_custom(process, vka, vspace, config, 0);
+    return sel4utils_configure_process_custom(process, vka, vspace, config, 0, NULL, 0);
 }
 
 static int create_reservations(vspace_t *vspace, int num, sel4utils_elf_region_t regions[])
@@ -494,7 +494,7 @@ static int create_fault_endpoint(vka_t *vka, sel4utils_process_t *process)
 }
 
 int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *vka,
-                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid)
+                                       vspace_t *spawner_vspace, sel4utils_process_config_t config, int pid, const char *elf_file, int elf_size)
 {
     int error;
     sel4utils_alloc_data_t *data = NULL;
@@ -556,9 +556,16 @@ int sel4utils_configure_process_custom(sel4utils_process_t *process, vka_t *vka,
     if (config.is_elf) {
         unsigned long size;
         unsigned long cpio_len = _cpio_archive_end - _cpio_archive;
-        char const *file = cpio_get_file(_cpio_archive, cpio_len, config.image_name, &size);
+        char const *file;
+        if (elf_file != NULL && elf_size != 0) {
+            file = elf_file;
+            size = elf_size;
+        } else {
+            file = cpio_get_file(_cpio_archive, cpio_len, config.image_name, &size);
+        }
         elf_t elf;
-        elf_newFile(file, size, &elf);
+        error = elf_newFile(file, size, &elf);
+        assert(error >= 0);
 
         if (config.do_elf_load) {
             process->entry_point = sel4utils_elf_load(&process->vspace, spawner_vspace, vka, vka, &elf);

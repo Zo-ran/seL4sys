@@ -2,7 +2,7 @@
 
 #include <utils/page.h>
 
-#define MAX_PHISICAL_MEM 0x1fb00000
+#define MAX_PHISICAL_MEM 0x1fb00000     // ~ 500M
 
 #define TEXT_START 0x8048000
 #define KERNEL_START 0xe0100000

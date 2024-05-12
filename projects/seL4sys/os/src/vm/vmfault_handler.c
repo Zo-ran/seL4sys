@@ -1,6 +1,7 @@
 #include <sel4/sel4.h>
 #include <sel4utils/vspace_internal.h>
 #include <sel4utils/vspace.h>
+#include <vka/capops.h>
 
 #include <stdio.h>
 
@@ -15,6 +16,14 @@ static inline VFrame *find_vframe(VFrame *head, seL4_Word vaddr) {
             return curr;
     }
     return NULL;
+}
+
+static inline void unmap_page(seL4_CPtr frame) {
+    seL4_ARCH_Page_Unmap(frame);
+    cspacepath_t path;
+    vka_cspace_make_path(&vka, frame, &path);
+    vka_cnode_delete(&path);
+    vka_cspace_free(&vka, frame);
 }
 
 static inline void page_replace(PCB *pcb, VFrame *vframe) {
@@ -68,7 +77,8 @@ static inline void page_replace(PCB *pcb, VFrame *vframe) {
         seL4_CapInitThreadCNode, frame, seL4_WordBits,
         seL4_AllRights
     );
-    vspace_unmap_pages(&pcb->proc.vspace, (void *)res->start, 1, PAGE_BITS_4K, &vka);
+    unmap_page(frame);
+    reserve_entries(&pcb->proc.vspace, res->start, PAGE_BITS_4K);
     replaced_page->inRAM = 0;
 
     // read pagefile to target page
@@ -97,7 +107,7 @@ static inline void alloc_frame(PCB *pcb, VFrame *vframe) {
 
 void expand_stack(PCB *pcb, seL4_Word fault_vaddr) {
     seL4_Word vaddr = PAGE_ALIGN_4K(fault_vaddr);
-    reservation_t reserve = vspace_reserve_range_at(&pcb->proc.vspace, vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
+    reservation_t reserve = vspace_reserve_range_at(&pcb->proc.vspace, (void *) vaddr, PAGE_SIZE_4K, seL4_AllRights, 1);
     VFrame *vframe = (VFrame *)malloc(sizeof(VFrame));
     vframe->reserve = reserve;
     vframe->dirty = 0;
@@ -123,7 +133,10 @@ void handle_vmfault(seL4_MessageInfo_t fault_msg, bool *resume, seL4_Word sender
             *resume = true;
         } else {
             if (vframe == NULL) {
-                if (currip != 0)
+                // need to destroy the processw
+                if (currip == 0)
+                    syscall_kill(sender_badge, 9);
+                else
                     ZF_LOGE("VM fault at vaddr: %p (IP %p).", fault_vaddr, currip);
                 *resume = false;
             } else {

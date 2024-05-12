@@ -24,6 +24,10 @@
 #define SYSCALL_CLOSE 6
 #define SYSCALL_UNLINK 7
 #define SYSCALL_LSEEK 8
+#define SYSCALL_EXECVE 9
+#define SYSCALL_KILL 10
+#define SYSCALL_GETPID 11
+#define SYSCALL_EXIT 12
 
 typedef long (*muslcsys_syscall_t)(va_list);
 

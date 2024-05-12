@@ -11,6 +11,10 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <utils/util.h>
+#include <muslcsys/vsyscall.h>
+#include <shared_area.h>
+
+#include "ipc_wrapper.h"
 
 static void sel4_abort(void)
 {
@@ -21,9 +25,30 @@ static void sel4_abort(void)
     while (1); /* We don't return after this */
 }
 
-long sys_exit(va_list ap)
-{
-    abort();
+long sys_execve(va_list ap) {
+    const char *path = va_arg(ap, char *);
+    char **argv = va_arg(ap, char **);
+    char **envp = va_arg(ap, char **);
+    int argc = 0;
+    for (; argv[argc] != NULL; ++argc);
+    const char *shared0 = puts_shared_str(path);
+    char **shared1 = get_shared_area(argc * sizeof(char *));
+    for (int i = 0; i < argc; ++i)
+        shared1[i] = puts_shared_str(argv[i]);
+    syscall_ipc_normal(4, SYSCALL_EXECVE, shared0, argc, shared1);
+    return seL4_GetMR(0);
+}
+
+long sys_kill(va_list ap) {
+    int pid = va_arg(ap, int);
+    int sig = va_arg(ap, int);
+    syscall_ipc_normal(3, SYSCALL_KILL, pid, sig);
+    return seL4_GetMR(0);
+}
+
+long sys_exit(va_list ap) {
+    int sig = va_arg(ap, int);
+    syscall_ipc_normal(2, SYSCALL_EXIT, sig);
     return 0;
 }
 
@@ -39,10 +64,9 @@ long sys_gettid(va_list ap)
     return 0;
 }
 
-long sys_getpid(va_list ap)
-{
-    ZF_LOGV("Ignoring call to %s", __FUNCTION__);
-    return 0;
+long sys_getpid(va_list ap) {
+    syscall_ipc_normal(1, SYSCALL_GETPID);
+    return seL4_GetMR(0);
 }
 
 long sys_tgkill(va_list ap)

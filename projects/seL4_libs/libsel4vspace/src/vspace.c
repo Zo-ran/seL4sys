@@ -14,7 +14,6 @@ void *vspace_new_sized_stack(vspace_t *vspace, size_t n_pages, void *proc) {
     uintptr_t stack_bottom = STACK_TOP_VADDR - STACK_SIZE;
     uintptr_t cur = stack_bottom;
     sel4utils_process_t *process = proc;
-    process->pframes_used = 0;
     for (int i = 0; i < n_pages; ++i) {
         reservation_t reserve = vspace_reserve_range_at(vspace, (void *) cur, PAGE_SIZE_4K, seL4_AllRights, 1);
         assert(reserve.res != NULL);
@@ -43,7 +42,7 @@ void vspace_free_sized_stack(vspace_t *vspace, void *stack_top, size_t n_pages)
         uintptr_t stack_bottom = (uintptr_t) stack_top - (n_pages * PAGE_SIZE_4K);
         vspace_unmap_pages(vspace, (void *) stack_bottom, n_pages,
                            seL4_PageBits, (vka_t *) VSPACE_FREE);
-        vspace_free_reservation_by_vaddr(vspace, (void *)(stack_bottom - PAGE_SIZE_4K));
+        vspace_free_reservation_by_vaddr(vspace, (void *) stack_bottom);
     } else {
         ZF_LOGW("Freeing 0 sized stack");
     }
