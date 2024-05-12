@@ -1,4 +1,5 @@
 #include "timer.h"
+#include "../rootvars.h"
 #include <platsupport/timer.h>
 #include <sel4platsupport/io.h>
 
@@ -18,14 +19,19 @@ void timer_init(vka_t *vka, vspace_t *vspace, simple_t *simple) {
     assert(error == 0);
 }
 
-void timer_sleep(seL4_Word microsec) {
-    seL4_Word count = 0, milisec = microsec / 1000;
+void timer_sleep(void *data) {
+    TimeData *td = (TimeData *)data;
+    seL4_Word microsec = td->time;
+    seL4_Word count = 0, milisec = microsec / 1000 / 3;
     while (count < milisec) {
         seL4_Word badge;
         seL4_Wait(timer_ntfn_object.cptr, &badge);
         sel4platsupport_irq_handle(&timer_ops.irq_ops, MINI_IRQ_INTERFACE_NTFN_ID, badge);
         count++;
     }
+    seL4_NBSend(td->reply, seL4_MessageInfo_new(0, 0, 0, 1));
+    vka_cspace_free(&vka, td->reply);
+    free(data);
 }
 
 uint64_t timer_get_time() {

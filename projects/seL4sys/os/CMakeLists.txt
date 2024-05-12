@@ -15,11 +15,14 @@ add_executable(
     src/syscall_handler.c
     src/console/vga.c
     src/console/keyboard.c
+    src/console/stdio_handler.c
     src/filesystem/disk.c
     src/filesystem/ext.c
     src/filesystem/fs.c
     src/filesystem/pagefile.c
     src/vm/vmfault_handler.c
+    src/vm/mem_projection.c
+    src/worker/sys_worker.c
     archive.o
 )
 
@@ -29,7 +32,7 @@ target_link_libraries(
     sel4runtime sel4
     muslc utils 
     sel4muslcsys sel4platsupport sel4utils sel4debug 
-    sel4allocman
+    sel4allocman sel4sync
 )
 
 # Tell the build system that this application is the root task. 

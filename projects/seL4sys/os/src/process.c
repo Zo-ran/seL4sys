@@ -58,9 +58,6 @@ int syscall_execve(const char *path, int argc, char **argv) {
         new_pcb->file_table[i].flags = O_WRONLY;
     }
     new_pcb->file_table[STDIN_FILENO].flags = O_RDONLY;
-    // set up process syscall shared memory 
-    reservation_t reserve = vspace_reserve_range_at(&new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
-    vspace_share_mem_at_vaddr(&vspace, &new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, (void *)SYS_SHARED_AREA_VADDR, reserve);
     new_process->replacer = new_process->vframes;
     // start new process
     sel4utils_spawn_process_v(new_process, &vka, &vspace, argc, argv, seL4_MaxPrio);

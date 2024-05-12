@@ -30,7 +30,7 @@
 
 #include <muslcsys/io.h>
 #include <muslcsys/vsyscall.h>
-#include <shared_area.h>
+
 #include "arch_stdio.h"
 #include "ipc_wrapper.h"
 
@@ -220,8 +220,7 @@ long sys_open(va_list ap) {
     const char *path = va_arg(ap, char *);
     int flags = va_arg(ap, int);
     mode_t mode = va_arg(ap, mode_t);
-    const char *shared = puts_shared_str(path);
-    syscall_ipc_normal(3, SYSCALL_OPEN, shared, flags);
+    syscall_ipc_normal(3, SYSCALL_OPEN, path, flags);
     return seL4_GetMR(0);
 }
 
@@ -248,10 +247,8 @@ long sys_close(va_list ap) {
 
 long sys_unlink(va_list ap) {
     const char *path = va_arg(ap, char *);
-    const char *shared = puts_shared_str(path);
-    syscall_ipc_normal(2, SYSCALL_UNLINK, shared);
+    syscall_ipc_normal(2, SYSCALL_UNLINK, path);
     return seL4_GetMR(0);
-    assert(0);
 }
 
 
@@ -274,8 +271,7 @@ long sys_writev(va_list ap) {
     if (seL4_DebugCapIdentify(SERVER_EP_BADGE)) {
         for (int i = 0; i < iovcnt; ++i)
             if (iov[i].iov_len != 0) {
-                const char *shared = puts_shared_str(iov[i].iov_base);
-                syscall_ipc_normal(4, SYSCALL_WRITE, fildes, iov[i].iov_len, shared);
+                syscall_ipc_normal(4, SYSCALL_WRITE, fildes, iov[i].iov_len, iov[i].iov_base);
                 ret += seL4_GetMR(0);
             }
     } else if (fildes == STDOUT_FILENO || fildes == STDERR_FILENO) {
@@ -304,7 +300,7 @@ long sys_readv(va_list ap) {
     for (int i = 0; i < iovcnt; i++) {
         int nr = 0;
         if (iov[i].iov_len != 0) {
-            syscall_ipc_normal(3, SYSCALL_READ, fd, iov[i].iov_len);
+            syscall_ipc_normal(4, SYSCALL_READ, fd, iov[i].iov_len, iov[i].iov_base);
             nr = seL4_GetMR(0);
         }
         if (nr < 0) {
@@ -312,10 +308,9 @@ long sys_readv(va_list ap) {
                 read = nr;
             break;
         }
-        char *d = iov[i].iov_base;
-        char *read_data = (char *)seL4_GetMR(1);
-        memcpy(d, read_data, nr);
+
         read += nr;
+        
         if (nr != iov[i].iov_len) break;
     }
 

@@ -5,6 +5,9 @@
 #include "ext.h"
 #include "fs.h"
 #include "pagefile.h"
+#include "../rootvars.h"
+#include "../process.h"
+#include "../vm/mem_projection.h"
 
 SuperBlock sBlock;
 GroupDesc gDesc[MAX_GROUP_NUM];
@@ -197,4 +200,77 @@ void filesystem_init() {
     printf("available: %d\n", sBlock.availInodeNum);
     ls("/");
     ls("/swap");
+}
+
+void readfile_handler(void *data) {
+    FileData *filed = (FileData *)data;
+    FCB *fcb = filed->fcb;
+    int fd = filed->fd, max_len = filed->max_len;
+    char *str = (char *)setup_projection_space(filed->pcb, (void *)filed->str);
+    assert(!cross_page((void *)str, (void *)(str + max_len)));
+    seL4_SetMR(0, syscall_readfile(fcb, fd, str, max_len));
+    seL4_SetMR(1, (seL4_Word)str);
+    seL4_NBSend(filed->reply, seL4_MessageInfo_new(0, 0, 0, 2));
+    destroy_projection_space((void *)str);
+    vka_cspace_free(&vka, filed->reply);
+    free(data);
+}
+
+void writefile_handler(void *data) {
+    FileData *filed = (FileData *)data;
+    FCB *fcb = filed->fcb;
+    int fd = filed->fd, len = filed->max_len;
+    const char *str = (char *)setup_projection_space(filed->pcb, (void *)filed->str);
+    assert(!cross_page((void *)str, (void *)(str + len)));
+    seL4_SetMR(0, syscall_writefile(fcb, fd, str, len));
+    seL4_NBSend(filed->reply, seL4_MessageInfo_new(0, 0, 0, 1));
+    destroy_projection_space((void *)str);
+    vka_cspace_free(&vka, filed->reply);
+    free(data);
+}
+
+void openfile_handler(void *data) {
+    FileData *filed = (FileData *)data;
+    const char *path = (char *)setup_projection_space(filed->pcb, (void *)filed->str);
+    int mode = filed->max_len;
+
+    int inodeOffset = syscall_open(path, mode);
+    if (inodeOffset == -1) {
+        seL4_SetMR(0, -1);
+    } else {
+        PCB *sender_pcb = filed->pcb;
+        int i = 3;
+        for (; i < MAX_FILE_NUM; i++)
+            if (!sender_pcb->file_table[i].inuse) {
+                sender_pcb->file_table[i].inuse = 1;
+                sender_pcb->file_table[i].inodeOffset = inodeOffset;
+                sender_pcb->file_table[i].offset = 0;
+                sender_pcb->file_table[i].flags = mode;
+                break;
+            }
+        seL4_SetMR(0, (i >= MAX_FILE_NUM ) ? -1 : i);
+    }
+
+    seL4_NBSend(filed->reply, seL4_MessageInfo_new(0, 0, 0, 1));
+    destroy_projection_space((void *)path);
+    vka_cspace_free(&vka, filed->reply);
+    free(data);
+}
+
+void unlink_handler(void *data) {
+    FileData *filed = (FileData *)data;
+    const char *str = (char *)setup_projection_space(filed->pcb, (void *)filed->str);
+    seL4_SetMR(0, syscall_unlink(str));
+    seL4_NBSend(filed->reply, seL4_MessageInfo_new(0, 0, 0, 1));
+    destroy_projection_space((void *)str);
+    vka_cspace_free(&vka, filed->reply);
+    free(data);
+}
+
+void lseek_handler(void *data) {
+    FileData *filed = (FileData *)data;
+    seL4_SetMR(0, syscall_lseek(filed->fcb, filed->fd, filed->max_len, (int)filed->str));
+    seL4_NBSend(filed->reply, seL4_MessageInfo_new(0, 0, 0, 1));
+    vka_cspace_free(&vka, filed->reply);
+    free(data);
 }

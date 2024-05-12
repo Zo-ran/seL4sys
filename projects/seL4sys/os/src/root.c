@@ -38,6 +38,8 @@
 #include "vm/vmfault_handler.h"
 #include "timer/timer.h"
 #include "process.h"
+#include "worker/sys_worker.h"
+#include "console/stdio_handler.h"
 
 seL4_BootInfo *boot_info;
 simple_t simple;
@@ -47,6 +49,7 @@ vspace_t vspace;
 ps_io_ops_t io_ops;
 vka_object_t fault_ep;
 seL4_CPtr syscall_ep;
+seL4_CPtr dispatcher_ep;
 seL4_CPtr root_cspace_cap;
 seL4_CPtr root_vspace_cap;
 
@@ -64,10 +67,6 @@ static sel4utils_alloc_data_t data;
 #define PORT_PIC_MASTER 0x20
 #define PORT_PIC_SLAVE  0xA0
 #define IRQ_SLAVE       2
-
-
-// TODO: add lock to shared memory
-// TODO: set different sys server threads
 
 void rootvars_init() {
     boot_info = platsupport_get_bootinfo();
@@ -93,8 +92,10 @@ void rootvars_init() {
 void syscallserver_ipc_init() {
     vka_object_t obj = {0};
     FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &obj);
-    FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &fault_ep);
     syscall_ep = obj.cptr;
+    FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &fault_ep);
+    FUNC_IFERR("Failed to allocate endpoint!\n", vka_alloc_endpoint, &vka, &obj);
+    dispatcher_ep = obj.cptr;
 }
 
 
@@ -172,21 +173,12 @@ void load_shell(const char *app_name, uint8_t app_prio) {
     }
     new_pcb->file_table[STDIN_FILENO].flags = O_RDONLY;
     
-    // set up process syscall shared memory 
-    reservation_t reserve = vspace_reserve_range_at(&new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
-    vspace_share_mem_at_vaddr(&vspace, &new_process->vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, (void *)SYS_SHARED_AREA_VADDR, reserve);
     new_process->replacer = new_process->vframes;
     // start new process
     FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, new_process, &vka, &vspace, 0, NULL, 1);
 }
 
-void sys_shared_area_setup() {
-    reservation_t reserve = vspace_reserve_range_at(&vspace, (void *)SYS_SHARED_AREA_VADDR, PAGE_SIZE_4M, seL4_AllRights, 1);
-    int error = vspace_new_pages_at_vaddr(&vspace, (void *)SYS_SHARED_AREA_VADDR, 1, PAGE_BITS_4M, reserve);
-    assert(error == 0);
-}
-
-void start_system_thread(const char *name, sel4utils_thread_entry_fn entry_point, void *arg0, void *arg1, void *arg2) {
+void start_system_thread(const char *name, int priority, sel4utils_thread_entry_fn entry_point, void *arg0, void *arg1, void *arg2) {
     vka_object_t tcb;
     seL4_CPtr ipc_frame;
     seL4_UserContext regs = {0};
@@ -215,7 +207,7 @@ void start_system_thread(const char *name, sel4utils_thread_entry_fn entry_point
     FUNC_IFERR("Failed to set TLS base", seL4_TCB_SetTLSBase, tcb.cptr, tls);
 
     // set priority
-    FUNC_IFERR("Failed to set the priority!\n", seL4_TCB_SetPriority, tcb.cptr, seL4_CapInitThreadTCB, seL4_MaxPrio);
+    FUNC_IFERR("Failed to set the priority!\n", seL4_TCB_SetPriority, tcb.cptr, seL4_CapInitThreadTCB, priority);
 
     // start kbd thread
     FUNC_IFERR("Failed to new thread!\n", seL4_TCB_Resume, tcb.cptr);
@@ -242,18 +234,21 @@ int main(int argc, char *argv[]) {
     kbd_init(&vka, &simple);
     disk_init();
     filesystem_init();
-    sys_shared_area_setup();
 
     // init syscall endpoint
     syscallserver_ipc_init();
+
+    stdio_sem_init();
+    sysworkers_init();
 
     // load user apps
     // test();
     load_shell("shell", 1);
 
-    // start keyboard irq handle thread
-    start_system_thread("kbd irq handler", kbd_irq_handle_mainloop, 0, 0, 0);
-    start_system_thread("vmfault handler", handle_vmfault_loop, (void *)fault_ep.cptr, 0, 0);
+    // start system threads
+    start_system_thread("kbd irq handler", seL4_MaxPrio, kbd_irq_handle_mainloop, 0, 0, 0);
+    start_system_thread("vmfault handler", 254, handle_vmfault_loop, (void *)fault_ep.cptr, 0, 0);
+    // start_system_thread("worker dispatcher", 254, sysworker_dispatch_thread, (void *)dispatcher_ep, 0, 0);
 
     seL4_DebugDumpScheduler();
 

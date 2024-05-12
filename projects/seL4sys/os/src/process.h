@@ -13,6 +13,15 @@ struct PCB {
 };
 typedef struct PCB PCB;
 
+typedef struct FileData {
+    seL4_CPtr reply;
+    PCB *pcb;
+    FCB *fcb;
+    int fd;
+    char *str;
+    int max_len;
+} FileData;
+
 
 PCB *pid_getproc(seL4_Word pid);
 int alloc_pid();

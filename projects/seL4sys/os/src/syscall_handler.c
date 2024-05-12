@@ -3,7 +3,6 @@
 #include <muslcsys/vsyscall.h>
 #include <arch_stdio.h>
 #include <vm_layout.h>
-#include <shared_area.h>
 
 // C standard lib
 #include <unistd.h>
@@ -11,53 +10,82 @@
 #include "syscall_handler.h"
 #include "console/keyboard.h"
 #include "console/vga.h"
+#include "console/stdio_handler.h"
 #include "filesystem/fs.h"
 #include "timer/timer.h"
 #include "process.h"
+#include "worker/sys_worker.h"
+#include "rootvars.h"
+#include "vm/mem_projection.h"
 
 void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageInfo_t *reply_tag, seL4_Word badge) {
     seL4_Word syscall_number = seL4_GetMR(0);
     *have_reply = true;
     PCB *sender_pcb = pid_getproc(badge);
-    
+    seL4_CPtr reply;
     switch (syscall_number) {
         case SYSCALL_READ: {
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
             int fileno = seL4_GetMR(1), max_len = seL4_GetMR(2), read_len = 0;
-            char *read_data = get_shared_area(max_len);
+            char *data = (char *)seL4_GetMR(3);
             if (fileno == STDIN_FILENO) {
-                seL4_Wait(buf_full_ntfn.cptr, NULL);
-                while (buffer_head != buffer_tail && read_len < max_len) {
-                    read_data[read_len] = key_buffer[buffer_head++];
-                    buffer_head %= MAX_KEYBUFFER_SIZE;
-                    read_len += 1;
-                }
+                StdioData *sd = (StdioData *)malloc(sizeof(StdioData));
+                sd->reply = reply;
+                sd->max_len = max_len;
+                sd->wdata = data;
+                sd->pcb = sender_pcb;
+                sysworker_dispatch_thread(readstdin_handler, sd);
+                *have_reply = false;
             } else {
-                read_len = syscall_readfile(sender_pcb->file_table + fileno, fileno, read_data, max_len);
+                FileData *filed = (FileData *)malloc(sizeof(FileData));
+                filed->pcb = sender_pcb;
+                filed->reply = reply;
+                filed->fcb = sender_pcb->file_table + fileno;
+                filed->fd = fileno;
+                filed->str = data;
+                filed->max_len = max_len;
+                sysworker_dispatch_thread(readfile_handler, filed);
+                *have_reply = false;
             }
-            seL4_SetMR(0, read_len);
-            seL4_SetMR(1, (seL4_Word)read_data);
             break;
         }
         case SYSCALL_WRITE: {
-            int fileno = seL4_GetMR(1), len = seL4_GetMR(2), write_len;
-            const char *data = (char *)seL4_GetMR(3);
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
+            int fileno = seL4_GetMR(1), len = seL4_GetMR(2);
+            char *data = (char *)seL4_GetMR(3);
             if (fileno == STDOUT_FILENO || fileno == STDERR_FILENO) {
-                for (int i = 0; i < len; ++i) {
-                    char ch = data[i];
-                    __arch_putchar(ch); 
-                    vga_putchar(ch, true);
-                }
-                update_cursor();
-                write_len = len;
+                StdioData *sd = (StdioData *)malloc(sizeof(StdioData));
+                sd->reply = reply;
+                sd->max_len = len;
+                sd->wdata = data;
+                sd->pcb = sender_pcb;
+                sysworker_dispatch_thread(writestdout_handler, sd);
+                *have_reply = false;
             } else {
-                write_len = syscall_writefile(sender_pcb->file_table + fileno, fileno, data, len);
+                FileData *filed = (FileData *)malloc(sizeof(FileData));
+                filed->reply = reply;
+                filed->fcb = sender_pcb->file_table + fileno;
+                filed->fd = fileno;
+                filed->str = data;
+                filed->max_len = len;
+                filed->pcb = sender_pcb;
+                sysworker_dispatch_thread(writefile_handler, filed);
+                *have_reply = false;
             }
-            seL4_SetMR(0, write_len);
             break;
         }
-        case SYSCALL_SLEEP:
-            timer_sleep(seL4_GetMR(1));
+        case SYSCALL_SLEEP: {
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
+            TimeData *td = (TimeData *)malloc(sizeof(TimeData));
+            td->reply = reply;
+            td->time = seL4_GetMR(1);
+            sysworker_dispatch_thread(timer_sleep, td);
+            *have_reply = false;
             break;
+        }
         case SYSCALL_GETIME:
             seL4_SetMR(0, timer_get_time());
             break;
@@ -88,25 +116,23 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
             break;
         }
         case SYSCALL_OPEN: {
-            const char *path = (char *)seL4_GetMR(1);
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
+            char *path = (char *)seL4_GetMR(1);
             int flags = seL4_GetMR(2);
-            int inodeOffset = syscall_open(path, flags);
-            if (inodeOffset == -1) {
-                seL4_SetMR(0, -1);
-                return;
-            }
-            for (int i = 3; i < MAX_FILE_NUM; i++)
-                if (!sender_pcb->file_table[i].inuse) {
-                    sender_pcb->file_table[i].inuse = 1;
-                    sender_pcb->file_table[i].inodeOffset = inodeOffset;
-                    sender_pcb->file_table[i].offset = 0;
-                    sender_pcb->file_table[i].flags = flags;
-                    seL4_SetMR(0, i);
-                    break;
-                }
+
+            FileData *filed = (FileData *)malloc(sizeof(FileData));
+            filed->reply = reply;
+            filed->str = path;
+            filed->max_len = flags;
+            filed->pcb = sender_pcb;
+            sysworker_dispatch_thread(openfile_handler, filed);
+            *have_reply = false;
             break;
         }
         case SYSCALL_CLOSE: {
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
             int fd = seL4_GetMR(1);
             if (fd >= MAX_FILE_NUM || fd < 0)
                 seL4_SetMR(0, -1);
@@ -115,20 +141,48 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
             break;
         }
         case SYSCALL_UNLINK: {
-            const char *path = (char *)seL4_GetMR(1);
-            seL4_SetMR(0, syscall_unlink(path));
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
+            char *path = (char *)seL4_GetMR(1);
+            
+            FileData *filed = (FileData *)malloc(sizeof(FileData));
+            filed->pcb = sender_pcb;
+            filed->reply = reply;
+            filed->str = path;
+            sysworker_dispatch_thread(unlink_handler, filed);
+            *have_reply = false;
             break;
         }
         case SYSCALL_LSEEK: {
+            vka_cspace_alloc(&vka, &reply);
+            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
             int fileno = seL4_GetMR(1), offset = seL4_GetMR(2), whence = seL4_GetMR(3);
-            seL4_SetMR(0, syscall_lseek(sender_pcb->file_table + fileno, fileno, offset, whence));
+            FileData *filed = (FileData *)malloc(sizeof(FileData));
+            filed->reply = reply;
+            filed->fd = fileno;
+            filed->max_len = offset;
+            filed->str = (char *)whence;
+            filed->fcb = sender_pcb->file_table + fileno;
+            sysworker_dispatch_thread(lseek_handler, filed);
+            *have_reply = false;
             break;
         }
         case SYSCALL_EXECVE: {
             const char *path = (char *)seL4_GetMR(1);
             int argc = seL4_GetMR(2);
-            char **argv = (char **)seL4_GetMR(3);
-            seL4_SetMR(0, syscall_execve(path, argc, argv));
+            char **argv = (char **)malloc(sizeof(char *) * argc);
+            for (int i = 0; i < argc; ++i) {
+                argv[i] = (char *)seL4_GetMR(i + 3);
+                assert(!cross_page((void *)path, (void *)argv[i]));
+            }
+            char *new_path = setup_projection_space(sender_pcb, (void *)path);
+            for (int i = 0; i < argc; ++i)
+                argv[i] = argv[i] + (seL4_Word)new_path - (seL4_Word)path;
+            // for (int i = 0 ; i < argc; ++i)
+            //     printf("debug: %p %p\n", new_path, argv[i]);
+            seL4_SetMR(0, syscall_execve(new_path, argc, argv));
+            destroy_projection_space((void *)new_path);
+            free(argv);
             break;
         }
         case SYSCALL_KILL: {

@@ -12,7 +12,7 @@
 #include <stdarg.h>
 #include <utils/util.h>
 #include <muslcsys/vsyscall.h>
-#include <shared_area.h>
+
 
 #include "ipc_wrapper.h"
 
@@ -31,11 +31,12 @@ long sys_execve(va_list ap) {
     char **envp = va_arg(ap, char **);
     int argc = 0;
     for (; argv[argc] != NULL; ++argc);
-    const char *shared0 = puts_shared_str(path);
-    char **shared1 = get_shared_area(argc * sizeof(char *));
-    for (int i = 0; i < argc; ++i)
-        shared1[i] = puts_shared_str(argv[i]);
-    syscall_ipc_normal(4, SYSCALL_EXECVE, shared0, argc, shared1);
+    // const char *shared0 = puts_shared_str(path);
+    // char **shared1 = get_shared_area(argc * sizeof(char *));
+    // for (int i = 0; i < argc; ++i)
+    //     shared1[i] = puts_shared_str(argv[i]);
+    syscall_ipc_execve(path, argc, argv);
+    // syscall_ipc_normal(4, SYSCALL_EXECVE, path, argc, argv);
     return seL4_GetMR(0);
 }
 
