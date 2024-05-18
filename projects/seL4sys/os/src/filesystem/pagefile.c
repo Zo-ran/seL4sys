@@ -1,5 +1,6 @@
 #include "pagefile.h"
 #include "fs.h"
+#include "ext.h"
 
 #include <fcntl.h>
 #include <stdlib.h>

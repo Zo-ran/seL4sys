@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "ext.h"
+#include "../../include/ext.h"
 #include "../ioport.h"
 
 void wait_disk(void) {

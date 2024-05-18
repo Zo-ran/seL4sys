@@ -131,8 +131,6 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
             break;
         }
         case SYSCALL_CLOSE: {
-            vka_cspace_alloc(&vka, &reply);
-            seL4_CNode_SaveCaller(seL4_CapInitThreadCNode, reply, seL4_WordBits);
             int fd = seL4_GetMR(1);
             if (fd >= MAX_FILE_NUM || fd < 0)
                 seL4_SetMR(0, -1);
@@ -178,11 +176,41 @@ void handle_syscall(seL4_MessageInfo_t msg_tag, bool *have_reply, seL4_MessageIn
             char *new_path = setup_projection_space(sender_pcb, (void *)path);
             for (int i = 0; i < argc; ++i)
                 argv[i] = argv[i] + (seL4_Word)new_path - (seL4_Word)path;
-            // for (int i = 0 ; i < argc; ++i)
-            //     printf("debug: %p %p\n", new_path, argv[i]);
-            seL4_SetMR(0, syscall_execve(new_path, argc, argv));
+            seL4_SetMR(0, syscall_execve(sender_pcb, new_path, argc, argv));
             destroy_projection_space((void *)new_path);
             free(argv);
+            break;
+        }
+        case SYSCALL_GETCWD: {
+            const char *path = (char *)seL4_GetMR(1);
+            int len = seL4_GetMR(2);
+            char *new_path = setup_projection_space(sender_pcb, (void *)path);
+            strcpy(new_path, sender_pcb->cwd);
+            destroy_projection_space((void *)new_path);
+            break;
+        }
+        case SYSCALL_CHDIR: {
+            const char *path = (char *)seL4_GetMR(1);
+            char *new_path = setup_projection_space(sender_pcb, (void *)path);
+            strcpy(sender_pcb->cwd, new_path);
+            destroy_projection_space((void *)new_path);
+            break;
+        }
+        case SYSCALL_LS: {
+            const char *path = (char *)seL4_GetMR(1);
+            char *buf = (char *)seL4_GetMR(2);
+            char *new_path = setup_projection_space(sender_pcb, (void *)path);
+            char *new_buf = setup_projection_space(sender_pcb, (void *)buf);
+            ls(new_path, new_buf);
+            destroy_projection_space((void *)new_path);
+            destroy_projection_space((void *)new_buf);
+            break;
+        }
+        case SYSCALL_PS: {
+            char *buf = (char *)seL4_GetMR(1);
+            char *new_buf = setup_projection_space(sender_pcb, (void *)buf);
+            syscall_ps(new_buf);
+            destroy_projection_space((void *)new_buf);
             break;
         }
         case SYSCALL_KILL: {

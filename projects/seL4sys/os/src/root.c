@@ -158,13 +158,12 @@ void load_shell(const char *app_name, uint8_t app_prio) {
     config.fault_endpoint = fault_ep;
     // configure user test process
     FUNC_IFERR("Failed to configure new process!\n", sel4utils_configure_process_custom, new_process, &vka, &vspace, config, cur_pid, NULL, 0);
-    NAME_THREAD(new_process->thread.tcb.cptr, "user test thread");
+    NAME_THREAD(new_process->thread.tcb.cptr, "shell");
 
     // mint the syscall endpoint into the process
     vka_cspace_make_path(&vka, syscall_ep, &cap_path);
     sel4utils_mint_cap_to_process(new_process, cap_path, seL4_AllRights, cur_pid);
 
-    // set up process stdin stdout stderr TODO: complete it
     for (int i = 0; i < 3; ++i) {
         new_pcb->file_table[i].inuse = 1;
         new_pcb->file_table[i].inodeOffset = -1;
@@ -172,11 +171,15 @@ void load_shell(const char *app_name, uint8_t app_prio) {
         new_pcb->file_table[i].flags = O_WRONLY;
     }
     new_pcb->file_table[STDIN_FILENO].flags = O_RDONLY;
-    
+    memset(new_pcb->cwd, 0, sizeof(new_pcb->cwd));
+    strcpy(new_pcb->cwd, "/");
+    memset(new_pcb->cmd, 0, sizeof(new_pcb->cmd));
+    strcpy(new_pcb->cmd, "shell");
+    new_pcb->stime = timer_get_time() / 1000 / 1000;
     new_process->replacer = new_process->vframes;
     // start new process
     FUNC_IFERR("Failed to start new process!\n", sel4utils_spawn_process_v, new_process, &vka, &vspace, 0, NULL, 1);
-}
+}   
 
 void start_system_thread(const char *name, int priority, sel4utils_thread_entry_fn entry_point, void *arg0, void *arg1, void *arg2) {
     vka_object_t tcb;

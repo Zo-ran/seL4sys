@@ -251,6 +251,18 @@ long sys_unlink(va_list ap) {
     return seL4_GetMR(0);
 }
 
+long sys_getcwd(va_list ap) {
+    const char *path = va_arg(ap, char *);
+    int len = va_arg(ap, int);
+    syscall_ipc_normal(3, SYSCALL_GETCWD, path, len);
+    return 0;
+}
+
+long sys_chdir(va_list ap) {
+    const char *path = va_arg(ap, char *);
+    syscall_ipc_normal(2, SYSCALL_CHDIR, path);
+    return 0;
+}
 
 static write_buf_fn stdio_write = sys_platform_write;
 

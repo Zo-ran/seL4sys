@@ -26,7 +26,6 @@ void readstdin_handler(void *data) {
         read_len += 1;
     }
     seL4_SetMR(0, read_len);
-    seL4_SetMR(1, (seL4_Word)read_data);
     seL4_NBSend(sd->reply, seL4_MessageInfo_new(0, 0, 0, 2));
     destroy_projection_space((void *)read_data);
     vka_cspace_free(&vka, sd->reply);

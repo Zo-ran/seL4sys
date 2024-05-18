@@ -1,6 +1,8 @@
-#include "process.h"
 #include "rootvars.h"
 #include "filesystem/pagefile.h"
+#include "filesystem/fs.h"
+#include "../include/pcb.h"
+#include "timer/timer.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -25,7 +27,7 @@ int alloc_pid() {
     return -1;
 }
 
-int syscall_execve(const char *path, int argc, char **argv) {
+int syscall_execve(PCB *parent, const char *path, int argc, char **argv) {
     // read elf file
     char elf_file[MAX_ELF_SIZE];
     int elf_size;
@@ -58,6 +60,12 @@ int syscall_execve(const char *path, int argc, char **argv) {
         new_pcb->file_table[i].flags = O_WRONLY;
     }
     new_pcb->file_table[STDIN_FILENO].flags = O_RDONLY;
+    memset(new_pcb->cwd, 0, sizeof(new_pcb->cwd));
+    strcpy(new_pcb->cwd, parent->cwd);
+    memset(new_pcb->cmd, 0, sizeof(new_pcb->cmd));
+    strcpy(new_pcb->cmd, path);
+    new_pcb->stime = timer_get_time() / 1000 / 1000;
+    new_process->replacer = new_process->vframes;
     new_process->replacer = new_process->vframes;
     // start new process
     sel4utils_spawn_process_v(new_process, &vka, &vspace, argc, argv, seL4_MaxPrio);
@@ -75,8 +83,18 @@ int syscall_kill(int pid, int sig) {
             if (vframe->pagefile != NULL)
                 free_pagefile(vframe->pagefile);
         memset(proc_table + pid, 0, sizeof(PCB));
-        printf("exit success!\n");
         return 0;
     }
     return -1;
+}
+
+void syscall_ps(char *buf) {
+    strcat(buf, "PID SIZE   STIME   COMMAND\n");
+    for (int i = 0; i < MAX_PROCESS_NUM; ++i)
+        if (proc_table[i].inuse) {
+            char tmp[64] = "\0";
+            sprintf(tmp, "%3d %4d %7d %9s\n", i, proc_table[i].proc.pframes_used, proc_table[i].stime, proc_table[i].cmd);
+            strcat(buf, tmp);
+        }
+            
 }

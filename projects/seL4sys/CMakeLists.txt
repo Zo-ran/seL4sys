@@ -21,6 +21,8 @@ sel4_libs_import_libraries()
 
 add_subdirectory(apps/shell)
 add_subdirectory(apps/benchmark)
+add_subdirectory(apps/hello)
+add_subdirectory(apps/endless)
 add_subdirectory(os)
 
 include(simulation)

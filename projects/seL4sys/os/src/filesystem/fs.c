@@ -3,11 +3,10 @@
 #include <string.h>
 #include <fcntl.h>
 #include "ext.h"
-#include "fs.h"
 #include "pagefile.h"
 #include "../rootvars.h"
-#include "../process.h"
 #include "../vm/mem_projection.h"
+#include "fs.h"
 
 SuperBlock sBlock;
 GroupDesc gDesc[MAX_GROUP_NUM];
@@ -33,16 +32,16 @@ GroupDesc gDesc[MAX_GROUP_NUM];
 // TODO: implement active inode table
 // TODO: set file priviledge level
 
-void ls(const char *filename) {
+void ls(const char *filename, char *buf) {
     Inode inode;
 	int inodeOffset = 0;
     int ret = readInode(&sBlock, gDesc, &inode, &inodeOffset, filename);
     assert(ret == 0);
     DirEntry dir;
     for (int i = 0; getDirEntry(&sBlock, &inode, i, &dir) == 0; ++i) {
-        printf("%s ", dir.name);
+        strcat(buf, dir.name);
+        strcat(buf, " ");
     }
-    printf("\n");
 }
 
 static inline int find_last_of(const char *str, char token, int end) {
@@ -198,8 +197,6 @@ void filesystem_init() {
 	readGroupHeader(&sBlock, gDesc);
     pagefile_init(&sBlock, gDesc);
     printf("available: %d\n", sBlock.availInodeNum);
-    ls("/");
-    ls("/swap");
 }
 
 void readfile_handler(void *data) {

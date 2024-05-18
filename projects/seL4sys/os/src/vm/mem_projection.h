@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../process.h"
+#include "../../include/pcb.h"
 
 void *setup_projection_space(PCB *pcb, void *vaddr);
 void destroy_projection_space(void *vaddr);
